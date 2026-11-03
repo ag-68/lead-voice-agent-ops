@@ -11,7 +11,15 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Lead, AuditLog, fetchAuditLogs, simulateVoiceCall, reprocessLead } from "@/lib/api";
+import { Input } from "@/components/ui/input";
+import {
+  Lead,
+  AuditLog,
+  fetchAuditLogs,
+  simulateVoiceCall,
+  reprocessLead,
+  resolveClaimedLead,
+} from "@/lib/api";
 
 interface LeadDetailProps {
   lead: Lead | null;
@@ -33,6 +41,9 @@ export function LeadDetail({ lead, open, onClose, onRefresh }: LeadDetailProps) 
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [loadingLogs, setLoadingLogs] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
+  const [demoWhen, setDemoWhen] = useState("");
+  const [manualNotes, setManualNotes] = useState("");
+  const [actionError, setActionError] = useState<string | null>(null);
 
   useEffect(() => {
     if (lead && open) {
@@ -81,6 +92,27 @@ export function LeadDetail({ lead, open, onClose, onRefresh }: LeadDetailProps) 
     }
   };
 
+  const handleResolveClaimed = async (action: "complete" | "book_demo") => {
+    if (!lead) return;
+    setActionLoading(true);
+    setActionError(null);
+    try {
+      await resolveClaimedLead(lead.id, {
+        action,
+        demo_scheduled_for: demoWhen.trim() || undefined,
+        notes: manualNotes.trim() || undefined,
+      });
+      setDemoWhen("");
+      setManualNotes("");
+      await loadAuditLogs();
+      onRefresh();
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : "Could not update that lead.");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
   if (!lead) return null;
 
   return (
@@ -96,7 +128,7 @@ export function LeadDetail({ lead, open, onClose, onRefresh }: LeadDetailProps) 
         <Tabs defaultValue="overview">
           <TabsList>
             <TabsTrigger value="overview">Overview</TabsTrigger>
-            <TabsTrigger value="enrichment">AI Enrichment</TabsTrigger>
+            <TabsTrigger value="enrichment">AI Score</TabsTrigger>
             <TabsTrigger value="audit">Audit Trail</TabsTrigger>
             <TabsTrigger value="actions">Actions</TabsTrigger>
           </TabsList>
@@ -121,7 +153,14 @@ export function LeadDetail({ lead, open, onClose, onRefresh }: LeadDetailProps) 
                 <CardContent className="space-y-2">
                   <p className="flex items-center gap-2">
                     <span className="text-muted-foreground">Status:</span>
-                    <Badge>{lead.status.replace(/_/g, " ")}</Badge>
+                    <Badge>
+                      {{
+                        scoring: "scoring",
+                        scored: "scored",
+                        enriching: "scoring",
+                        enriched: "scored",
+                      }[lead.status] ?? lead.status.replace(/_/g, " ")}
+                    </Badge>
                   </p>
                   <p><span className="text-muted-foreground">ICP Score:</span> <span className="font-bold">{lead.icp_score.toFixed(0)}/100</span></p>
                   <p><span className="text-muted-foreground">Tier:</span> {lead.tier?.replace(/_/g, " ") || "Pending"}</p>
@@ -136,6 +175,26 @@ export function LeadDetail({ lead, open, onClose, onRefresh }: LeadDetailProps) 
                 </CardHeader>
                 <CardContent>
                   <p className="text-sm">{lead.message}</p>
+                </CardContent>
+              </Card>
+            )}
+
+            {(lead.status === "booked_demo" || lead.demo_scheduled_for) && (
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm">Booked demo</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-1 text-sm">
+                  <p>
+                    <span className="text-muted-foreground">When: </span>
+                    {lead.demo_scheduled_for || "Time not extracted"}
+                  </p>
+                  {lead.demo_booking_notes && (
+                    <p>
+                      <span className="text-muted-foreground">Notes: </span>
+                      {lead.demo_booking_notes}
+                    </p>
+                  )}
                 </CardContent>
               </Card>
             )}
@@ -157,7 +216,7 @@ export function LeadDetail({ lead, open, onClose, onRefresh }: LeadDetailProps) 
           <TabsContent value="enrichment" className="space-y-4">
             <Card>
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm">Company Data (Claude Enriched)</CardTitle>
+                <CardTitle className="text-sm">Company data from scoring</CardTitle>
               </CardHeader>
               <CardContent className="grid grid-cols-2 gap-4">
                 <div>
@@ -187,7 +246,7 @@ export function LeadDetail({ lead, open, onClose, onRefresh }: LeadDetailProps) 
             {lead.icp_reasoning && (
               <Card>
                 <CardHeader className="pb-2">
-                  <CardTitle className="text-sm">ICP Analysis (Claude Reasoning)</CardTitle>
+                  <CardTitle className="text-sm">Why this score</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="bg-muted p-4 rounded">
@@ -265,7 +324,7 @@ export function LeadDetail({ lead, open, onClose, onRefresh }: LeadDetailProps) 
               <CardContent className="space-y-4">
                 <div>
                   <p className="text-sm text-muted-foreground mb-2">
-                    Reprocess this lead through the enrichment pipeline:
+                    Reprocess this lead through the scoring pipeline:
                   </p>
                   <Button
                     variant="outline"
@@ -296,6 +355,50 @@ export function LeadDetail({ lead, open, onClose, onRefresh }: LeadDetailProps) 
                         Simulate Call (Meeting Booked)
                       </Button>
                     </div>
+                  </div>
+                )}
+
+                {lead.status === "claimed_manually" && (
+                  <div className="space-y-3">
+                    <p className="text-sm text-muted-foreground">
+                      This lead was claimed by a person. After their call, mark it completed or booked (manual — no ElevenLabs webhook).
+                    </p>
+                    <label className="block text-sm">
+                      Demo time (for booked)
+                      <Input
+                        className="mt-1"
+                        value={demoWhen}
+                        onChange={(e) => setDemoWhen(e.target.value)}
+                        placeholder="e.g. Thursday 2pm"
+                      />
+                    </label>
+                    <label className="block text-sm">
+                      Notes
+                      <Input
+                        className="mt-1"
+                        value={manualNotes}
+                        onChange={(e) => setManualNotes(e.target.value)}
+                        placeholder="Optional"
+                      />
+                    </label>
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        disabled={actionLoading}
+                        onClick={() => handleResolveClaimed("complete")}
+                      >
+                        Mark completed
+                      </Button>
+                      <Button
+                        type="button"
+                        disabled={actionLoading}
+                        onClick={() => handleResolveClaimed("book_demo")}
+                      >
+                        Mark booked demo
+                      </Button>
+                    </div>
+                    {actionError && <p className="text-sm text-red-600">{actionError}</p>}
                   </div>
                 )}
               </CardContent>

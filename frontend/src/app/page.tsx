@@ -1,13 +1,42 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { CalendarCheck, GitBranch, Plus, Target, Users } from "lucide-react";
 import { StatsCards } from "@/components/stats-cards";
 import { LeadsTable } from "@/components/leads-table";
+import { BookedDemosTable } from "@/components/booked-demos-table";
 import { LeadForm } from "@/components/lead-form";
 import { LeadDetail } from "@/components/lead-detail";
-import { PipelineViz } from "@/components/pipeline-viz";
-import { Lead, PipelineStats, fetchLeads, fetchStats } from "@/lib/api";
+import { PipelineModules } from "@/components/pipeline-modules";
+import { ArchitectureCards } from "@/components/architecture-cards";
+import { AiConfigPanel } from "@/components/ai-config-panel";
+import { ClientPreferencesPanel } from "@/components/client-preferences-panel";
+import { Lead, PipelineStats, deleteLead, fetchLeads, fetchStats } from "@/lib/api";
+import { LeadActionPanel } from "@/components/lead-action-panel";
+
+const SECTIONS = [
+  { id: "pipeline", label: "Project Pipeline", icon: GitBranch },
+  { id: "leads", label: "Leads", icon: Users },
+  { id: "submit", label: "Test Lead", icon: Plus },
+  { id: "demos", label: "Booked Demos", icon: CalendarCheck },
+  { id: "preferences", label: "Client Preferences", icon: Target },
+] as const;
+
+type SectionId = (typeof SECTIONS)[number]["id"];
+
+const FLOW = [
+  { title: "Receive", detail: "Intake webhook or form saves the lead" },
+  { title: "Score", detail: "Configured LLM rates the company vs Client Preferences" },
+  { title: "Approve", detail: "Selected (90+ / F500) waits for a person to release the call" },
+  { title: "Reach-out", detail: "ElevenLabs dials; post-call webhook → Voice Completed or Booked Demo" },
+] as const;
+
+const BLAST_RADIUS = [
+  "Fortune 500 leads always need human approval",
+  "Voice calls need explicit Slack sign-off",
+  "All actions logged to an immutable audit trail",
+  "External APIs gated behind the approval workflow",
+] as const;
 
 export default function Dashboard() {
   const [leads, setLeads] = useState<Lead[]>([]);
@@ -15,6 +44,9 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
+  const [section, setSection] = useState<SectionId>("leads");
+  const [pipelinePane, setPipelinePane] = useState<"general" | "flow" | "architecture">("general");
+  const [actionLeadId, setActionLeadId] = useState<number | null>(null);
 
   const loadData = useCallback(async () => {
     try {
@@ -25,7 +57,14 @@ export default function Dashboard() {
       setLeads(leadsData);
       setStats(statsData);
     } catch (error) {
-      console.error("Failed to load data:", error);
+      // Backend reloads drop one poll; do not treat that as an app error.
+      const transient =
+        error instanceof TypeError &&
+        typeof error.message === "string" &&
+        error.message.toLowerCase().includes("fetch");
+      if (!transient) {
+        console.error("Failed to load data:", error);
+      }
     } finally {
       setLoading(false);
     }
@@ -44,207 +83,229 @@ export default function Dashboard() {
 
   const handleLeadCreated = () => {
     loadData();
+    setSection("leads");
+  };
+
+  const handleDeleteLead = async (lead: Lead) => {
+    await deleteLead(lead.id);
+    if (selectedLead?.id === lead.id) {
+      setSelectedLead(null);
+      setDetailOpen(false);
+    }
+    if (actionLeadId === lead.id) setActionLeadId(null);
+    await loadData();
   };
 
   return (
-    <div className="min-h-screen bg-background">
-      <header className="border-b">
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-2xl font-bold">Lead Qualifier Pipeline</h1>
-              <p className="text-sm text-muted-foreground">
-                AI-powered lead enrichment with human-in-the-loop approval
-              </p>
+    <div className="flex h-full flex-col overflow-hidden bg-background">
+      <header className="shrink-0 border-b">
+        <div className="flex items-center gap-4 px-4 py-3">
+          <h1 className="shrink-0 text-xl font-bold">Lead Qualifier Pipeline</h1>
+          <ol className="flex min-w-0 flex-1 gap-2">
+            {FLOW.map((step) => (
+              <li
+                key={step.title}
+                className="min-w-0 flex-1 rounded-lg border bg-muted/40 px-3 py-2"
+              >
+                <p className="text-lg font-semibold">{step.title}</p>
+                <p className="whitespace-pre-line text-sm leading-snug text-muted-foreground">{step.detail}</p>
+              </li>
+            ))}
+          </ol>
+          <div className="flex items-center gap-3">
+            <div className="text-right">
+              <p className="text-xs text-muted-foreground">Auto-refresh</p>
+              <p className="text-sm font-medium">Every 5s</p>
             </div>
-            <div className="flex items-center gap-4">
-              <div className="text-right">
-                <p className="text-xs text-muted-foreground">Auto-refresh</p>
-                <p className="text-sm font-medium">Every 5s</p>
-              </div>
-              <div className="h-3 w-3 rounded-full bg-green-500 animate-pulse" />
-            </div>
+            <div className="h-3 w-3 rounded-full bg-green-500 animate-pulse" />
           </div>
         </div>
       </header>
 
-      <main className="container mx-auto px-4 py-6">
-        <div className="space-y-6">
-          <StatsCards stats={stats} loading={loading} />
+      <div className="flex min-h-0 flex-1">
+        <aside className="flex min-h-0 w-[12.6rem] shrink-0 flex-col overflow-y-auto border-r bg-muted/40 p-3">
+          <nav className="flex flex-col gap-1">
+            {SECTIONS.map((item) => {
+              const Icon = item.icon;
+              const active = section === item.id;
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => setSection(item.id)}
+                  className={`flex items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-medium ${
+                    active
+                      ? "bg-background text-foreground shadow-sm"
+                      : "text-muted-foreground hover:bg-background/70 hover:text-foreground"
+                  }`}
+                >
+                  <Icon className="size-4" aria-hidden />
+                  {item.label}
+                </button>
+              );
+            })}
+          </nav>
+          <div className="mt-3 border-t pt-3">
+            <AiConfigPanel />
+          </div>
+          <p className="mt-auto pt-4 text-xs text-muted-foreground">
+            Lead Qualifier Pipeline
+          </p>
+        </aside>
 
-          <Tabs defaultValue="leads" className="space-y-4">
-            <TabsList>
-              <TabsTrigger value="leads">Leads</TabsTrigger>
-              <TabsTrigger value="pipeline">Pipeline</TabsTrigger>
-              <TabsTrigger value="submit">Submit Lead</TabsTrigger>
-              <TabsTrigger value="architecture">Architecture</TabsTrigger>
-            </TabsList>
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-4">
+            {section === "leads" && (
+              <div className="flex min-h-0 flex-1 flex-col gap-4">
+                <div className="relative">
+                  <StatsCards stats={stats} loading={loading} />
+                  {actionLeadId !== null && leads.some((lead) => lead.id === actionLeadId) && (
+                    <LeadActionPanel
+                      lead={leads.find((lead) => lead.id === actionLeadId)!}
+                      onClose={() => setActionLeadId(null)}
+                      onDone={loadData}
+                    />
+                  )}
+                </div>
+                <LeadsTable
+                  leads={leads}
+                  loading={loading}
+                  chosenId={actionLeadId}
+                  onChooseLead={(lead) => setActionLeadId(lead.id)}
+                  onSelectLead={handleSelectLead}
+                  onDeleteLead={handleDeleteLead}
+                  onSubmitLead={() => setSection("submit")}
+                />
+              </div>
+            )}
+            {section === "pipeline" && (
+              <div className="flex min-h-0 flex-1 gap-3">
+                <div className="flex shrink-0 flex-col gap-1.5" role="tablist" aria-label="Pipeline view">
+                  {([
+                    ["general", "General"],
+                    ["flow", "Pipeline Flow"],
+                    ["architecture", "Architecture"],
+                  ] as const).map(([id, label]) => (
+                    <button
+                      key={id}
+                      type="button"
+                      role="tab"
+                      aria-selected={pipelinePane === id}
+                      onClick={() => setPipelinePane(id)}
+                      className={`rounded-md border px-2 py-3 text-sm font-semibold [writing-mode:vertical-rl] rotate-180 ${
+                        pipelinePane === id
+                          ? "border-foreground bg-foreground text-background"
+                          : "border-border bg-muted text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                <div className="min-h-0 min-w-0 flex-1 overflow-hidden" role="tabpanel">
+                  {pipelinePane === "general" ? (
+                    <div className="h-full overflow-y-auto">
+                      <div className="mx-auto max-w-6xl space-y-6 p-1">
+                        <div>
+                          <h2 className="text-2xl font-semibold">Voice-Agent Aided Lead Pipeline</h2>
+                          <p className="mt-3 text-lg leading-relaxed text-muted-foreground">
+                            A portfolio demo of AI-first GTM tooling: inbound leads are scored by a configurable LLM, high-value ones wait for a human gate, then an ElevenLabs voice agent can dial — with a full audit trail and blast-radius controls.
+                          </p>
+                        </div>
 
-            <TabsContent value="leads">
-              <LeadsTable
-                leads={leads}
-                loading={loading}
-                onSelectLead={handleSelectLead}
-              />
-            </TabsContent>
+                        <div className="grid gap-4 md:grid-cols-2">
+                          <div className="rounded-lg border bg-muted/30 p-5">
+                            <h3 className="text-lg font-semibold">Motivation</h3>
+                            <p className="mt-3 text-base leading-relaxed text-muted-foreground">
+                              Sales teams drown in inbound volume. Auto-dialing every lead is risky; parking everything is slow. This project explores the middle path — models score fit, people release the call — the kind of guarded automation Internal AI / GTM engineering roles ship.
+                            </p>
+                            <p className="mt-3 text-base leading-relaxed text-muted-foreground">
+                              The design ideology is <span className="font-medium text-foreground">blast control</span>: treat every step by how far it can reach. Scoring stays inside the app; dialing and Slack posts are high blast and must wait for an explicit human choice. That keeps AI useful without letting it spend trust, money, or a prospect’s phone number on its own.
+                            </p>
+                          </div>
+                          <div className="rounded-lg border border-amber-500/25 bg-yellow-50 p-5 dark:bg-yellow-950">
+                            <h3 className="text-lg font-semibold">Blast Control Approach</h3>
+                            <p className="mt-3 text-base leading-relaxed text-muted-foreground">
+                              External side effects are gated; internal writes are logged. In practice:
+                            </p>
+                            <ul className="mt-3 space-y-1.5 text-base text-muted-foreground">
+                              {BLAST_RADIUS.map((item) => (
+                                <li key={item}>• {item}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        </div>
 
-            <TabsContent value="pipeline">
-              <div className="grid md:grid-cols-2 gap-6">
-                <PipelineViz stats={stats} />
-                <div className="space-y-4">
-                  <div className="p-6 border rounded-lg">
-                    <h3 className="font-semibold mb-4">Pipeline Flow</h3>
-                    <div className="space-y-4 text-sm">
-                      <div className="flex items-start gap-3">
-                        <span className="text-xl">1️⃣</span>
-                        <div>
-                          <p className="font-medium">Lead Received</p>
-                          <p className="text-muted-foreground">Webhook captures form submission</p>
-                        </div>
-                      </div>
-                      <div className="flex items-start gap-3">
-                        <span className="text-xl">2️⃣</span>
-                        <div>
-                          <p className="font-medium">Claude Enrichment</p>
-                          <p className="text-muted-foreground">AI analyzes and scores against ICP</p>
-                        </div>
-                      </div>
-                      <div className="flex items-start gap-3">
-                        <span className="text-xl">3️⃣</span>
-                        <div>
-                          <p className="font-medium">Approval Gate</p>
-                          <p className="text-muted-foreground">High-value leads require human approval via Slack</p>
-                        </div>
-                      </div>
-                      <div className="flex items-start gap-3">
-                        <span className="text-xl">4️⃣</span>
-                        <div>
-                          <p className="font-medium">Voice Outreach</p>
-                          <p className="text-muted-foreground">ElevenAgents makes automated call</p>
+                        <div className="grid gap-4 md:grid-cols-2">
+                          <div className="rounded-lg border bg-muted/30 p-5">
+                            <h3 className="text-lg font-semibold">Configurations</h3>
+                            <ul className="mt-3 space-y-1.5 text-base text-muted-foreground">
+                              <li>• <span className="font-medium text-foreground">Configure → Model</span> — provider, API key, and model name for ICP scoring</li>
+                              <li>• <span className="font-medium text-foreground">Configure → Voice Agent</span> — ElevenLabs key, agent id, phone number id, post-call webhook secret</li>
+                              <li>• <span className="font-medium text-foreground">Configure → Slack</span> — incoming webhook URL and signing secret for the same human gate</li>
+                              <li>• <span className="font-medium text-foreground">Client Preferences</span> — ideal-client criteria the scorer reads</li>
+                              <li>• <span className="font-medium text-foreground">Public HTTPS host</span> — cloud URL or ngrok for ElevenLabs / Slack callbacks when not on localhost</li>
+                            </ul>
+                          </div>
+                          <div className="rounded-lg border bg-muted/30 p-5">
+                            <h3 className="text-lg font-semibold">Testing</h3>
+                            <ul className="mt-3 space-y-1.5 text-base text-muted-foreground">
+                              <li>• Use <span className="font-medium text-foreground">Test Lead</span> with a sample company to walk intake → score → Parked or Selected</li>
+                              <li>• On Selected, try the dashboard call card or Slack buttons (Voice Agent / Myself / Remove)</li>
+                              <li>• Without a full voice setup, Voice Agent still simulates the dial; with ElevenLabs + a public callback URL, use a real post-call webhook</li>
+                              <li>• Check Booked Demos after a call that books a meeting (or Simulate Meeting Booked)</li>
+                              <li>• Pipeline Flow / Architecture tabs show the stage graph and stack detail</li>
+                            </ul>
+                          </div>
                         </div>
                       </div>
                     </div>
-                  </div>
-
-                  <div className="p-6 border rounded-lg bg-yellow-50 dark:bg-yellow-950">
-                    <h3 className="font-semibold mb-2 flex items-center gap-2">
-                      <span>⚠️</span> Blast Radius Controls
-                    </h3>
-                    <ul className="text-sm space-y-1 text-muted-foreground">
-                      <li>• Fortune 500 leads always require human approval</li>
-                      <li>• Voice calls need explicit Slack sign-off</li>
-                      <li>• All actions logged to immutable audit trail</li>
-                      <li>• External APIs gated behind approval workflow</li>
-                    </ul>
-                  </div>
+                  ) : pipelinePane === "flow" ? (
+                    <PipelineModules />
+                  ) : (
+                    <div className="h-full overflow-y-auto">
+                      <ArchitectureCards />
+                    </div>
+                  )}
                 </div>
               </div>
-            </TabsContent>
+            )}
 
-            <TabsContent value="submit">
-              <div className="max-w-2xl mx-auto">
-                <LeadForm onSuccess={handleLeadCreated} />
-              </div>
-            </TabsContent>
-
-            <TabsContent value="architecture">
-              <div className="grid md:grid-cols-2 gap-6">
-                <div className="space-y-4">
-                  <div className="p-6 border rounded-lg">
-                    <h3 className="font-semibold mb-4">Tech Stack</h3>
-                    <div className="space-y-3 text-sm">
-                      <div className="flex items-center justify-between p-2 bg-muted rounded">
-                        <span>Backend</span>
-                        <span className="font-mono">FastAPI + Python</span>
-                      </div>
-                      <div className="flex items-center justify-between p-2 bg-muted rounded">
-                        <span>Database</span>
-                        <span className="font-mono">SQLite (async)</span>
-                      </div>
-                      <div className="flex items-center justify-between p-2 bg-muted rounded">
-                        <span>AI Enrichment</span>
-                        <span className="font-mono">Claude API</span>
-                      </div>
-                      <div className="flex items-center justify-between p-2 bg-muted rounded">
-                        <span>Voice Agent</span>
-                        <span className="font-mono">ElevenLabs</span>
-                      </div>
-                      <div className="flex items-center justify-between p-2 bg-muted rounded">
-                        <span>Approval Workflow</span>
-                        <span className="font-mono">Slack Interactive</span>
-                      </div>
-                      <div className="flex items-center justify-between p-2 bg-muted rounded">
-                        <span>Frontend</span>
-                        <span className="font-mono">Next.js + shadcn/ui</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="p-6 border rounded-lg">
-                    <h3 className="font-semibold mb-4">Key Features</h3>
-                    <ul className="text-sm space-y-2">
-                      <li className="flex items-center gap-2">
-                        <span className="text-green-500">✓</span>
-                        <span>Webhook-driven lead intake</span>
-                      </li>
-                      <li className="flex items-center gap-2">
-                        <span className="text-green-500">✓</span>
-                        <span>Claude-powered ICP scoring</span>
-                      </li>
-                      <li className="flex items-center gap-2">
-                        <span className="text-green-500">✓</span>
-                        <span>Human-in-the-loop for high-value leads</span>
-                      </li>
-                      <li className="flex items-center gap-2">
-                        <span className="text-green-500">✓</span>
-                        <span>ElevenAgents voice integration</span>
-                      </li>
-                      <li className="flex items-center gap-2">
-                        <span className="text-green-500">✓</span>
-                        <span>Complete audit trail</span>
-                      </li>
-                      <li className="flex items-center gap-2">
-                        <span className="text-green-500">✓</span>
-                        <span>Blast radius guardrails</span>
-                      </li>
-                    </ul>
-                  </div>
+            {section === "demos" && (
+              <div className="flex min-h-0 flex-1 flex-col gap-3">
+                <div className="shrink-0">
+                  <h2 className="text-2xl font-semibold">Booked demos</h2>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Demonstrates post-call transcript intake and demo-date extraction. Calendar sync (Google / Outlook / etc.) is future work.
+                    {typeof stats?.demos_booked === "number" ? ` · ${stats.demos_booked} booked` : ""}
+                  </p>
                 </div>
+                <BookedDemosTable
+                  leads={leads}
+                  loading={loading}
+                  onSelectLead={handleSelectLead}
+                />
+              </div>
+            )}
 
-                <div className="p-6 border rounded-lg">
-                  <h3 className="font-semibold mb-4">API Endpoints</h3>
-                  <div className="space-y-4 text-sm font-mono">
-                    <div>
-                      <p className="text-green-600">POST /api/leads/</p>
-                      <p className="text-muted-foreground text-xs mt-1">Create new lead (webhook)</p>
-                    </div>
-                    <div>
-                      <p className="text-blue-600">GET /api/leads/</p>
-                      <p className="text-muted-foreground text-xs mt-1">List all leads with filters</p>
-                    </div>
-                    <div>
-                      <p className="text-blue-600">GET /api/leads/stats</p>
-                      <p className="text-muted-foreground text-xs mt-1">Pipeline statistics</p>
-                    </div>
-                    <div>
-                      <p className="text-yellow-600">POST /api/slack/interactions</p>
-                      <p className="text-muted-foreground text-xs mt-1">Slack button callbacks</p>
-                    </div>
-                    <div>
-                      <p className="text-blue-600">GET /api/audit/lead/&#123;id&#125;</p>
-                      <p className="text-muted-foreground text-xs mt-1">Lead audit trail</p>
-                    </div>
-                    <div>
-                      <p className="text-purple-600">POST /api/voice/callback</p>
-                      <p className="text-muted-foreground text-xs mt-1">ElevenAgents callback</p>
-                    </div>
-                  </div>
+            {section === "submit" && (
+              <div className="min-h-0 flex-1 overflow-y-auto">
+                <div className="mx-auto max-w-2xl">
+                  <LeadForm onSuccess={handleLeadCreated} />
                 </div>
               </div>
-            </TabsContent>
-          </Tabs>
+            )}
+
+            {section === "preferences" && (
+              <div className="min-h-0 flex-1 overflow-y-auto">
+                <div className="mx-auto max-w-3xl">
+                  <ClientPreferencesPanel />
+                </div>
+              </div>
+            )}
+          </div>
         </div>
-      </main>
+      </div>
 
       <LeadDetail
         lead={selectedLead}
@@ -252,15 +313,6 @@ export default function Dashboard() {
         onClose={() => setDetailOpen(false)}
         onRefresh={loadData}
       />
-
-      <footer className="border-t mt-12">
-        <div className="container mx-auto px-4 py-6">
-          <div className="flex items-center justify-between text-sm text-muted-foreground">
-            <p>Lead Qualifier Pipeline — Portfolio Project for ElevenLabs Application</p>
-            <p>Built with FastAPI, Claude, ElevenLabs, and Next.js</p>
-          </div>
-        </div>
-      </footer>
     </div>
   );
 }

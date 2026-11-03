@@ -65,25 +65,24 @@ async def handle_slack_interaction(
     await db.commit()
     
     if action_id == "approve_voice_call":
-        lead.status = LeadStatus.APPROVED
-        await db.commit()
-        
         await log_action(
             db=db,
             action="lead_approved",
             actor=f"slack:{user_id}",
             lead_id=lead.id,
-            details=f"Approved by {user_name} for voice outreach",
+            details=f"Call released by {user_name}",
             blast_radius=BlastRadius.DB_WRITE,
             requires_approval=True,
             approved_by=user_name,
         )
-        
+
         success, message, call_id = await trigger_voice_call(lead)
-        
+
         if success:
             lead.status = LeadStatus.VOICE_SCHEDULED
             lead.voice_call_scheduled_at = datetime.utcnow()
+            if call_id:
+                lead.voice_conversation_id = call_id
             await db.commit()
             
             await log_action(
@@ -100,13 +99,13 @@ async def handle_slack_interaction(
             return {
                 "response_type": "in_channel",
                 "replace_original": True,
-                "text": f"✅ *Approved by {user_name}*\n\nVoice call scheduled for {lead.name} at {lead.company_name}.\nCall ID: `{call_id}`"
+                "text": f"✅ *Call released by {user_name}*\n\nVoice call scheduled for {lead.name} at {lead.company_name}.\nCall ID: `{call_id}`"
             }
         else:
             return {
                 "response_type": "in_channel",
                 "replace_original": True,
-                "text": f"✅ *Approved by {user_name}* but voice call failed: {message}\n\nLead marked for manual follow-up."
+                "text": f"✅ *Call released by {user_name}* but the call was not placed: {message}\n\nThe lead was not dialed."
             }
     
     elif action_id == "claim_manually":
@@ -177,25 +176,24 @@ async def approve_via_url(
     token_record.used = True
     
     if action == "approve_voice":
-        lead.status = LeadStatus.APPROVED
-        await db.commit()
-        
         await log_action(
             db=db,
             action="lead_approved",
             actor=f"api:{user_name}",
             lead_id=lead.id,
-            details=f"Approved via direct URL",
+            details="Call released via direct URL",
             blast_radius=BlastRadius.DB_WRITE,
             requires_approval=True,
             approved_by=user_name,
         )
-        
+
         success, message, call_id = await trigger_voice_call(lead)
         
         if success:
             lead.status = LeadStatus.VOICE_SCHEDULED
             lead.voice_call_scheduled_at = datetime.utcnow()
+            if call_id:
+                lead.voice_conversation_id = call_id
             await db.commit()
             
             await log_action(

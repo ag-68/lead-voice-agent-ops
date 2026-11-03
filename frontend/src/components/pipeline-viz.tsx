@@ -1,31 +1,39 @@
 "use client";
 
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Card, CardAction, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PipelineStats } from "@/lib/api";
 
 interface PipelineVizProps {
   stats: PipelineStats | null;
+  onReadMore: () => void;
 }
 
 const pipelineStages = [
-  { key: "received", label: "Received", icon: "📥", color: "bg-gray-400" },
-  { key: "enriching", label: "Enriching", icon: "🔄", color: "bg-blue-400" },
-  { key: "enriched", label: "Enriched", icon: "✨", color: "bg-cyan-400" },
-  { key: "pending_approval", label: "Pending Approval", icon: "⏳", color: "bg-yellow-400" },
-  { key: "approved", label: "Approved", icon: "✅", color: "bg-green-400" },
-  { key: "voice_scheduled", label: "Voice Scheduled", icon: "📅", color: "bg-purple-400" },
-  { key: "voice_completed", label: "Voice Completed", icon: "🎉", color: "bg-emerald-400" },
+  { key: "received", label: "Received", detail: "Message from your contact platform is captured.", icon: "📥", color: "bg-gray-400" },
+  { key: "scoring", label: "Scoring", detail: "LLM scores the company against your preferences.", icon: "🔄", color: "bg-blue-400" },
+  { key: "scored", label: "Scored", detail: "Score saved; lead goes to approval.", icon: "✨", color: "bg-cyan-400" },
+  { key: "pending_approval", label: "Pending Approval", detail: "A person reviews the score before a call.", icon: "⏳", color: "bg-yellow-400" },
+  { key: "approved", label: "Approved", detail: "Person or score approved this client for a call.", icon: "✅", color: "bg-green-400" },
+  { key: "voice_scheduled", label: "Voice Scheduled", detail: "Voice agent will call to book the demo.", icon: "📅", color: "bg-purple-400" },
+  { key: "voice_completed", label: "Voice Completed", detail: "Call finished without a clear demo booking.", icon: "🎉", color: "bg-emerald-400" },
+  { key: "booked_demo", label: "Booked Demo", detail: "Demo agreed on the call.", icon: "✅", color: "bg-teal-500" },
 ];
 
-export function PipelineViz({ stats }: PipelineVizProps) {
+export function PipelineViz({ stats, onReadMore }: PipelineVizProps) {
   if (!stats) return null;
 
   const maxCount = Math.max(...Object.values(stats.leads_by_status), 1);
 
   return (
-    <Card>
+    <Card className="h-fit self-start">
       <CardHeader>
-        <CardTitle className="text-lg">Pipeline Stages</CardTitle>
+        <CardTitle>Pipeline Stages Summary</CardTitle>
+        <CardAction>
+          <Button type="button" variant="outline" size="xs" onClick={onReadMore}>
+            Read More
+          </Button>
+        </CardAction>
       </CardHeader>
       <CardContent>
         <div className="space-y-3">
@@ -35,12 +43,15 @@ export function PipelineViz({ stats }: PipelineVizProps) {
 
             return (
               <div key={stage.key} className="space-y-1">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="flex items-center gap-2">
+                <div className="flex items-center justify-between gap-3 text-sm">
+                  <span className="flex min-w-0 items-center gap-2">
                     <span>{stage.icon}</span>
-                    <span>{stage.label}</span>
+                    <span className="truncate">
+                      <span className="font-medium">{stage.label}</span>
+                      <span className="text-muted-foreground"> — {stage.detail}</span>
+                    </span>
                   </span>
-                  <span className="font-mono font-medium">{count}</span>
+                  <span className="shrink-0 font-mono font-medium">{count}</span>
                 </div>
                 <div className="h-2 bg-muted rounded-full overflow-hidden">
                   <div
@@ -51,21 +62,6 @@ export function PipelineViz({ stats }: PipelineVizProps) {
               </div>
             );
           })}
-        </div>
-
-        <div className="mt-6 pt-4 border-t">
-          <h4 className="text-sm font-medium mb-3">Lead Tiers</h4>
-          <div className="grid grid-cols-2 gap-2">
-            {Object.entries(stats.leads_by_tier).map(([tier, count]) => (
-              <div
-                key={tier}
-                className="flex items-center justify-between p-2 bg-muted rounded text-sm"
-              >
-                <span className="capitalize">{tier.replace(/_/g, " ")}</span>
-                <span className="font-mono font-medium">{count}</span>
-              </div>
-            ))}
-          </div>
         </div>
       </CardContent>
     </Card>

@@ -1,33 +1,24 @@
 import httpx
+import logging
 import secrets
 from datetime import datetime, timedelta
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from ..config import get_settings
-from ..models import Lead, SlackApprovalToken, LeadTier
+from ..models import Lead, SlackApprovalToken
+from .local_keys import active_slack
 
-settings = get_settings()
+logger = logging.getLogger(__name__)
 
 
 def _build_approval_message(lead: Lead, approve_token: str, claim_token: str) -> dict:
     """Build Slack Block Kit message with approval buttons"""
-    
-    tier_emoji = {
-        LeadTier.FORTUNE_500: "🏆",
-        LeadTier.ENTERPRISE: "🏢",
-        LeadTier.MID_MARKET: "📊",
-        LeadTier.SMB: "🏪",
-        LeadTier.UNQUALIFIED: "❓",
-    }
-    
-    score_color = "#36a64f" if lead.icp_score >= 70 else "#f2c744" if lead.icp_score >= 40 else "#d32f2f"
-    
+
     blocks = [
         {
             "type": "header",
             "text": {
                 "type": "plain_text",
-                "text": f"{tier_emoji.get(lead.tier, '📋')} High-Value Lead Requires Approval",
+                "text": f"How to call {lead.name}?",
                 "emoji": True
             }
         },
@@ -64,7 +55,7 @@ def _build_approval_message(lead: Lead, approve_token: str, claim_token: str) ->
             "elements": [
                 {
                     "type": "mrkdwn",
-                    "text": "⚠️ *Fortune 500 / High-Value Lead* - Human approval required before AI voice outreach"
+                    "text": f"How to call {lead.name}? Nothing is dialed until a person chooses."
                 }
             ]
         },
@@ -73,20 +64,20 @@ def _build_approval_message(lead: Lead, approve_token: str, claim_token: str) ->
             "elements": [
                 {
                     "type": "button",
-                    "text": {"type": "plain_text", "text": "✅ Approve Voice Call", "emoji": True},
+                    "text": {"type": "plain_text", "text": "Voice Agent", "emoji": True},
                     "style": "primary",
                     "action_id": "approve_voice_call",
                     "value": approve_token
                 },
                 {
                     "type": "button",
-                    "text": {"type": "plain_text", "text": "👤 Claim Manually", "emoji": True},
+                    "text": {"type": "plain_text", "text": "Myself", "emoji": True},
                     "action_id": "claim_manually",
                     "value": claim_token
                 },
                 {
                     "type": "button",
-                    "text": {"type": "plain_text", "text": "❌ Reject", "emoji": True},
+                    "text": {"type": "plain_text", "text": "Remove", "emoji": True},
                     "style": "danger",
                     "action_id": "reject_lead",
                     "value": approve_token
@@ -94,8 +85,11 @@ def _build_approval_message(lead: Lead, approve_token: str, claim_token: str) ->
             ]
         }
     ]
-    
-    return {"blocks": blocks}
+
+    return {
+        "text": f"How to call {lead.name}? {lead.company_name}",
+        "blocks": blocks,
+    }
 
 
 async def send_approval_request(
@@ -129,21 +123,25 @@ async def send_approval_request(
     await db.commit()
     
     message = _build_approval_message(lead, approve_token, claim_token)
-    
-    if not settings.slack_webhook_url:
+    webhook_url = (active_slack().get("webhook_url") or "").strip()
+
+    if not webhook_url:
+        logger.warning("Slack webhook not set; skipping real post for lead %s", lead.id)
         return True, f"mock_ts_{lead.id}"
-    
+
     async with httpx.AsyncClient() as client:
         response = await client.post(
-            settings.slack_webhook_url,
+            webhook_url,
             json=message,
             timeout=10.0,
         )
-        
+
         if response.status_code == 200:
             return True, response.text
-        else:
-            return False, f"Slack API error: {response.status_code} - {response.text}"
+
+        error = f"Slack API error: {response.status_code} - {response.text}"
+        logger.error("Slack approval post failed for lead %s: %s", lead.id, error)
+        return False, error
 
 
 async def update_approval_message(
@@ -152,17 +150,18 @@ async def update_approval_message(
     user_name: str,
 ) -> bool:
     """Update Slack message after approval/rejection"""
-    
-    if not settings.slack_webhook_url:
+
+    if not (active_slack().get("webhook_url") or "").strip():
         return True
-    
+
     status_text = {
-        "approve_voice": f"✅ Approved by {user_name} - Voice call scheduled",
-        "claim_manually": f"👤 Claimed by {user_name} for manual outreach",
-        "reject": f"❌ Rejected by {user_name}",
+        "approve_voice": f"Voice Agent chosen by {user_name} — call scheduled",
+        "claim_manually": f"Myself — claimed by {user_name} for manual outreach",
+        "reject": f"Removed by {user_name}",
     }
-    
-    message = {
+
+    _ = {
+        "text": status_text.get(action, "Status updated"),
         "blocks": [
             {
                 "type": "section",
@@ -173,7 +172,7 @@ async def update_approval_message(
             }
         ]
     }
-    
+
     return True
 
 

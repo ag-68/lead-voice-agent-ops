@@ -55,6 +55,9 @@ class LeadResponse(BaseModel):
     voice_call_scheduled_at: Optional[datetime]
     voice_call_completed_at: Optional[datetime]
     voice_call_summary: Optional[str]
+    voice_conversation_id: Optional[str] = None
+    demo_scheduled_for: Optional[str] = None
+    demo_booking_notes: Optional[str] = None
     
     created_at: datetime
     updated_at: datetime
@@ -95,6 +98,7 @@ class PipelineStats(BaseModel):
     approval_rate: float
     voice_calls_scheduled: int
     voice_calls_completed: int
+    demos_booked: int = 0
 
 
 class VoiceCallRequest(BaseModel):

@@ -3,8 +3,16 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
 from .utils.db import init_db
-from .routers import leads_router, slack_router, audit_router, voice_router
+from .routers import (
+    leads_router,
+    slack_router,
+    audit_router,
+    voice_router,
+    local_keys_router,
+    client_preferences_router,
+)
 from .config import get_settings
+from .services.local_keys import ai_status
 
 settings = get_settings()
 
@@ -45,6 +53,8 @@ app.include_router(leads_router)
 app.include_router(slack_router)
 app.include_router(audit_router)
 app.include_router(voice_router)
+app.include_router(local_keys_router)
+app.include_router(client_preferences_router)
 
 
 @app.get("/")
@@ -61,9 +71,9 @@ async def root():
             "docs": "/docs",
         },
         "features": {
-            "claude_enrichment": bool(settings.anthropic_api_key),
+            "llm_scoring": ai_status()["llm"]["configured"],
             "slack_integration": bool(settings.slack_webhook_url),
-            "elevenlabs_integration": bool(settings.elevenlabs_api_key),
+            "elevenlabs_integration": ai_status()["voice"]["configured"],
         }
     }
 

@@ -1,5 +1,6 @@
 "use client";
 
+import { CircleCheck, Phone, Target, Users } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PipelineStats } from "@/lib/api";
 
@@ -33,25 +34,25 @@ export function StatsCards({ stats, loading }: StatsCardsProps) {
       title: "Total Leads",
       value: stats.total_leads,
       description: "All time submissions",
-      icon: "📊",
+      icon: Users,
     },
     {
       title: "Avg ICP Score",
       value: `${stats.avg_icp_score.toFixed(0)}/100`,
       description: "Lead quality indicator",
-      icon: "🎯",
+      icon: Target,
     },
     {
       title: "Approval Rate",
       value: `${(stats.approval_rate * 100).toFixed(0)}%`,
-      description: "Leads approved for outreach",
-      icon: "✅",
+      description: "Selected leads with a call released",
+      icon: CircleCheck,
     },
     {
       title: "Voice Calls",
       value: `${stats.voice_calls_completed}/${stats.voice_calls_scheduled}`,
       description: "Completed / Scheduled",
-      icon: "📞",
+      icon: Phone,
     },
   ];
 
@@ -63,7 +64,7 @@ export function StatsCards({ stats, loading }: StatsCardsProps) {
             <CardTitle className="text-sm font-medium text-muted-foreground">
               {card.title}
             </CardTitle>
-            <span className="text-2xl">{card.icon}</span>
+            <card.icon className="size-5 text-muted-foreground" aria-hidden />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{card.value}</div>

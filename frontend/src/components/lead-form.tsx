@@ -89,9 +89,9 @@ export function LeadForm({ onSuccess }: LeadFormProps) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Submit Enterprise Lead</CardTitle>
+        <CardTitle>Test Lead</CardTitle>
         <CardDescription>
-          Simulate an inbound lead submission. The pipeline will automatically enrich and score the lead.
+          Simulate an inbound lead submission. The pipeline will automatically score the lead.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -179,7 +179,7 @@ export function LeadForm({ onSuccess }: LeadFormProps) {
           )}
 
           <Button type="submit" className="w-full" disabled={loading}>
-            {loading ? "Submitting..." : "Submit Lead"}
+            {loading ? "Submitting..." : "Submit test lead"}
           </Button>
         </form>
       </CardContent>

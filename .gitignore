@@ -5,9 +5,23 @@ __pycache__/
 *.so
 .Python
 venv/
+.venv/
 env/
+
+# Secrets & local env (keep *.example tracked)
 .env
+.env.*
+!.env.example
+!**/.env.example
+*.pem
+*.key
+credentials.json
+secrets/
+
+# Local databases
 *.db
+*.sqlite
+*.sqlite3
 
 # Node
 node_modules/
@@ -17,12 +31,13 @@ out/
 build/
 dist/
 
-# IDE
+# IDE / OS
 .idea/
 .vscode/
 *.swp
 *.swo
 .DS_Store
+Thumbs.db
 
 # Logs
 *.log
@@ -30,7 +45,11 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-# Test
+# Test / coverage
 .coverage
 htmlcov/
 .pytest_cache/
+
+# Local captures not meant for the repo (committed shots live in docs/screenshots/)
+/screenshots/
+*.local.png

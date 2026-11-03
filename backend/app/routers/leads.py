@@ -1,131 +1,17 @@
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Request
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
+from sqlalchemy import select, func, delete
 from typing import List
 from datetime import datetime
 
 from ..utils.db import get_db
 from ..models import (
-    Lead, LeadStatus, LeadTier,
+    Lead, LeadStatus, LeadTier, AuditLog, SlackApprovalToken,
     LeadCreate, LeadResponse, LeadEnrichment, PipelineStats
 )
-from ..services import (
-    enrich_lead, send_approval_request, 
-    log_action, BlastRadius
-)
-from ..config import get_settings
+from ..services import log_action, BlastRadius, qualify_lead, trigger_voice_call
 
 router = APIRouter(prefix="/api/leads", tags=["leads"])
-settings = get_settings()
-
-
-async def process_lead_pipeline(lead_id: int, db: AsyncSession):
-    """Background task to process lead through the qualification pipeline"""
-    
-    result = await db.execute(select(Lead).where(Lead.id == lead_id))
-    lead = result.scalar_one_or_none()
-    if not lead:
-        return
-    
-    lead.status = LeadStatus.ENRICHING
-    await db.commit()
-    
-    await log_action(
-        db=db,
-        action="lead_enrichment_started",
-        actor="system",
-        lead_id=lead.id,
-        details="Starting Claude enrichment",
-        blast_radius=BlastRadius.READ_ONLY,
-    )
-    
-    try:
-        enrichment, reasoning = await enrich_lead(
-            name=lead.name,
-            email=lead.email,
-            company_name=lead.company_name,
-            job_title=lead.job_title,
-            message=lead.message,
-        )
-        
-        lead.company_domain = enrichment.company_domain
-        lead.company_industry = enrichment.company_industry
-        lead.company_size = enrichment.company_size
-        lead.company_employees = enrichment.company_employees
-        lead.company_revenue = enrichment.company_revenue
-        lead.company_region = enrichment.company_region
-        lead.company_description = enrichment.company_description
-        lead.is_fortune_500 = enrichment.is_fortune_500
-        lead.icp_score = enrichment.icp_score
-        lead.icp_reasoning = enrichment.icp_reasoning
-        lead.tier = enrichment.tier
-        lead.status = LeadStatus.ENRICHED
-        
-        await db.commit()
-        
-        await log_action(
-            db=db,
-            action="lead_enriched",
-            actor="claude",
-            lead_id=lead.id,
-            details=f"ICP Score: {enrichment.icp_score}, Tier: {enrichment.tier.value}",
-            reasoning=reasoning,
-            blast_radius=BlastRadius.DB_WRITE,
-        )
-        
-        if enrichment.is_fortune_500 or enrichment.icp_score >= settings.icp_criteria["fortune_500_threshold"]:
-            lead.status = LeadStatus.PENDING_APPROVAL
-            await db.commit()
-            
-            await log_action(
-                db=db,
-                action="approval_required",
-                actor="system",
-                lead_id=lead.id,
-                details=f"High-value lead (Fortune 500: {enrichment.is_fortune_500}, Score: {enrichment.icp_score})",
-                blast_radius=BlastRadius.READ_ONLY,
-                requires_approval=True,
-            )
-            
-            success, result = await send_approval_request(db, lead)
-            
-            if success:
-                lead.slack_message_ts = result
-                await db.commit()
-                
-                await log_action(
-                    db=db,
-                    action="slack_approval_sent",
-                    actor="system",
-                    lead_id=lead.id,
-                    details=f"Slack message sent: {result}",
-                    blast_radius=BlastRadius.SLACK_POST,
-                )
-        else:
-            lead.status = LeadStatus.APPROVED
-            await db.commit()
-            
-            await log_action(
-                db=db,
-                action="auto_approved",
-                actor="system",
-                lead_id=lead.id,
-                details=f"Below Fortune 500 threshold (Score: {enrichment.icp_score})",
-                blast_radius=BlastRadius.READ_ONLY,
-            )
-            
-    except Exception as e:
-        lead.status = LeadStatus.FAILED
-        await db.commit()
-        
-        await log_action(
-            db=db,
-            action="enrichment_failed",
-            actor="system",
-            lead_id=lead.id,
-            details=str(e),
-            blast_radius=BlastRadius.READ_ONLY,
-        )
 
 
 @router.post("/", response_model=LeadResponse)
@@ -162,7 +48,7 @@ async def create_lead(
         blast_radius=BlastRadius.DB_WRITE,
     )
     
-    background_tasks.add_task(process_lead_pipeline, lead.id, db)
+    background_tasks.add_task(qualify_lead, lead.id)
     
     return lead
 
@@ -216,19 +102,27 @@ async def get_pipeline_stats(db: AsyncSession = Depends(get_db)):
     )
     avg_icp_score = avg_score.scalar() or 0
     
-    approved = await db.execute(
+    released = await db.execute(
         select(func.count(Lead.id))
-        .where(Lead.status.in_([LeadStatus.APPROVED, LeadStatus.VOICE_SCHEDULED, LeadStatus.VOICE_COMPLETED]))
+        .where(
+            Lead.status.in_(
+                [
+                    LeadStatus.VOICE_SCHEDULED,
+                    LeadStatus.VOICE_COMPLETED,
+                    LeadStatus.BOOKED_DEMO,
+                ]
+            )
+        )
     )
-    approved_count = approved.scalar() or 0
-    
-    pending = await db.execute(
+    released_count = released.scalar() or 0
+
+    waiting = await db.execute(
         select(func.count(Lead.id))
-        .where(Lead.status == LeadStatus.PENDING_APPROVAL)
+        .where(Lead.status.in_([LeadStatus.SELECTED, LeadStatus.PENDING_APPROVAL]))
     )
-    pending_count = pending.scalar() or 0
-    
-    approval_rate = approved_count / (approved_count + pending_count) if (approved_count + pending_count) > 0 else 0
+    waiting_count = waiting.scalar() or 0
+
+    approval_rate = released_count / (released_count + waiting_count) if (released_count + waiting_count) > 0 else 0
     
     voice_scheduled = await db.execute(
         select(func.count(Lead.id))
@@ -237,7 +131,13 @@ async def get_pipeline_stats(db: AsyncSession = Depends(get_db)):
     
     voice_completed = await db.execute(
         select(func.count(Lead.id))
-        .where(Lead.status == LeadStatus.VOICE_COMPLETED)
+        .where(
+            Lead.status.in_([LeadStatus.VOICE_COMPLETED, LeadStatus.BOOKED_DEMO])
+        )
+    )
+
+    demos_booked = await db.execute(
+        select(func.count(Lead.id)).where(Lead.status == LeadStatus.BOOKED_DEMO)
     )
     
     return PipelineStats(
@@ -248,6 +148,7 @@ async def get_pipeline_stats(db: AsyncSession = Depends(get_db)):
         approval_rate=approval_rate,
         voice_calls_scheduled=voice_scheduled.scalar() or 0,
         voice_calls_completed=voice_completed.scalar() or 0,
+        demos_booked=demos_booked.scalar() or 0,
     )
 
 
@@ -264,13 +165,29 @@ async def get_lead(lead_id: int, db: AsyncSession = Depends(get_db)):
     return lead
 
 
+@router.delete("/{lead_id}")
+async def delete_lead(lead_id: int, db: AsyncSession = Depends(get_db)):
+    """Remove one lead and the records that belong to it."""
+
+    result = await db.execute(select(Lead).where(Lead.id == lead_id))
+    lead = result.scalar_one_or_none()
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+
+    await db.execute(delete(SlackApprovalToken).where(SlackApprovalToken.lead_id == lead_id))
+    await db.execute(delete(AuditLog).where(AuditLog.lead_id == lead_id))
+    await db.delete(lead)
+    await db.commit()
+    return {"deleted": lead_id}
+
+
 @router.post("/{lead_id}/reprocess")
 async def reprocess_lead(
     lead_id: int,
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
 ):
-    """Reprocess a lead through the enrichment pipeline"""
+    """Reprocess a lead through the scoring pipeline"""
     
     result = await db.execute(select(Lead).where(Lead.id == lead_id))
     lead = result.scalar_one_or_none()
@@ -281,6 +198,151 @@ async def reprocess_lead(
     lead.status = LeadStatus.RECEIVED
     await db.commit()
     
-    background_tasks.add_task(process_lead_pipeline, lead.id, db)
+    background_tasks.add_task(qualify_lead, lead.id)
     
     return {"message": "Lead reprocessing started", "lead_id": lead_id}
+
+
+@router.post("/{lead_id}/decide")
+async def decide_lead(lead_id: int, request: Request, db: AsyncSession = Depends(get_db)):
+    """A person calls, claims, or rejects one lead from the page."""
+
+    try:
+        body = await request.json()
+    except Exception:
+        body = None
+    action = body.get("action") if isinstance(body, dict) else None
+    if action not in ("call", "claim", "reject"):
+        raise HTTPException(status_code=400, detail="Choose call, claim, or reject.")
+
+    result = await db.execute(select(Lead).where(Lead.id == lead_id))
+    lead = result.scalar_one_or_none()
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+
+    if action == "call":
+        success, message, call_id = await trigger_voice_call(lead)
+        if not success:
+            await log_action(
+                db=db,
+                action="voice_call_not_placed",
+                actor="dashboard",
+                lead_id=lead.id,
+                details=message,
+                blast_radius=BlastRadius.READ_ONLY,
+            )
+            raise HTTPException(status_code=400, detail=message)
+        lead.status = LeadStatus.VOICE_SCHEDULED
+        lead.voice_call_scheduled_at = datetime.utcnow()
+        if call_id:
+            lead.voice_conversation_id = call_id
+        await db.commit()
+        await log_action(
+            db=db,
+            action="voice_call_triggered",
+            actor="dashboard",
+            lead_id=lead.id,
+            details=f"Call released from the page. Call ID: {call_id}",
+            blast_radius=BlastRadius.VOICE_TRIGGER,
+            requires_approval=True,
+            approved_by="dashboard",
+        )
+        return {"status": lead.status.value, "message": "Call started."}
+
+    if action == "claim":
+        lead.status = LeadStatus.CLAIMED_MANUALLY
+        lead.assigned_to = "dashboard"
+        await db.commit()
+        await log_action(
+            db=db,
+            action="lead_claimed",
+            actor="dashboard",
+            lead_id=lead.id,
+            details="Claimed from the page. No call.",
+            blast_radius=BlastRadius.DB_WRITE,
+        )
+        return {"status": lead.status.value, "message": "Claimed. No call."}
+
+    lead.status = LeadStatus.REJECTED
+    await db.commit()
+    await log_action(
+        db=db,
+        action="lead_rejected",
+        actor="dashboard",
+        lead_id=lead.id,
+        details="Rejected from the page. No call.",
+        blast_radius=BlastRadius.DB_WRITE,
+    )
+    return {"status": lead.status.value, "message": "Rejected. No call."}
+
+
+@router.post("/{lead_id}/resolve")
+async def resolve_claimed_lead(lead_id: int, request: Request, db: AsyncSession = Depends(get_db)):
+    """Manually finish a claimed (human) outreach as completed or booked demo."""
+
+    try:
+        body = await request.json()
+    except Exception:
+        body = None
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=400, detail="Send a JSON body.")
+    action = body.get("action")
+    if action not in ("complete", "book_demo"):
+        raise HTTPException(status_code=400, detail="Choose complete or book_demo.")
+
+    result = await db.execute(select(Lead).where(Lead.id == lead_id))
+    lead = result.scalar_one_or_none()
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    if lead.status != LeadStatus.CLAIMED_MANUALLY:
+        raise HTTPException(
+            status_code=400,
+            detail="Only a claimed lead can be manually completed or booked.",
+        )
+
+    notes = body.get("notes")
+    notes_text = notes.strip() if isinstance(notes, str) and notes.strip() else None
+    when = body.get("demo_scheduled_for")
+    when_text = when.strip() if isinstance(when, str) and when.strip() else None
+
+    lead.voice_call_completed_at = datetime.utcnow()
+    if action == "book_demo":
+        lead.status = LeadStatus.BOOKED_DEMO
+        lead.demo_scheduled_for = when_text or "Time set by human agent"
+        lead.demo_booking_notes = notes_text or "Booked manually after a claimed (human) call."
+        lead.voice_call_summary = (
+            (lead.voice_call_summary or "")
+            + ("\n\n" if lead.voice_call_summary else "")
+            + f"MANUAL BOOKING\nWhen: {lead.demo_scheduled_for}\n"
+            + (f"Notes: {lead.demo_booking_notes}" if lead.demo_booking_notes else "")
+        ).strip()
+        await db.commit()
+        await log_action(
+            db=db,
+            action="demo_booked",
+            actor="dashboard",
+            lead_id=lead.id,
+            details=f"Manual book after claim. When: {lead.demo_scheduled_for}",
+            blast_radius=BlastRadius.DB_WRITE,
+        )
+        return {"status": lead.status.value, "message": "Marked as booked demo."}
+
+    lead.status = LeadStatus.VOICE_COMPLETED
+    lead.demo_scheduled_for = None
+    lead.demo_booking_notes = notes_text
+    lead.voice_call_summary = (
+        (lead.voice_call_summary or "")
+        + ("\n\n" if lead.voice_call_summary else "")
+        + "MANUAL COMPLETION\nHuman agent finished outreach without booking a demo."
+        + (f"\nNotes: {notes_text}" if notes_text else "")
+    ).strip()
+    await db.commit()
+    await log_action(
+        db=db,
+        action="voice_call_completed",
+        actor="dashboard",
+        lead_id=lead.id,
+        details="Manual complete after claim. No demo booked.",
+        blast_radius=BlastRadius.DB_WRITE,
+    )
+    return {"status": lead.status.value, "message": "Marked as completed."}

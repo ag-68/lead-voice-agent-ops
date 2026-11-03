@@ -1,74 +1,98 @@
-# Lead Qualifier Pipeline
+# Voice-Agent Aided Lead Pipeline
 
-An autonomous inbound lead qualifier with Claude-powered enrichment, Slack human-in-the-loop approval, and ElevenAgents voice follow-up.
+Inbound lead qualifier with configurable LLM scoring, a human gate (dashboard + Slack), ElevenLabs outbound voice, and HMAC post-call webhooks — designed with **blast-radius** and an immutable audit trail.
 
-![Pipeline Flow](https://img.shields.io/badge/Pipeline-Webhook→Claude→Slack→Voice-blue)
+![Pipeline](https://img.shields.io/badge/Pipeline-Intake→Score→Gate→Voice→Post--call-blue)
+
+> **Live demo:** _add URL after deploy_ · **Walkthrough:** _add Loom / short video_
+
+## Why this project (Internal AI / GTM automation)
+
+Built as a portfolio demo of the work an **Internal AI Engineer** ships for GTM and ops: agentic workflows, Slack in the loop, Python APIs and webhooks, and safety as a first-class design choice.
+
+| Theme from the role | How this repo shows it |
+|---------------------|-------------------------|
+| AI agents & workflow orchestration | Score → Selected/Parked → human choice → ElevenLabs dial → post-call branch |
+| Integrate with the business stack (e.g. Slack) | Incoming webhook + interactivity (`Voice Agent` / `Myself` / `Remove`) |
+| Reusable automation patterns | Modular FastAPI services, Configure panel, Client Preferences |
+| Own the experiment end-to-end | Test Lead → score → gate → call (real or simulated) → Booked Demo |
+| Evaluation, auditability, blast radius | Retries on scoring, audit log, blast-radius tags on sensitive actions |
+| Backend depth (APIs, webhooks, orchestration) | FastAPI intake, HMAC callbacks, async pipeline jobs |
+
+## Screenshots
+
+Drop captures into [`docs/screenshots/`](docs/screenshots/) (see that folder’s README for filenames). Suggested embeds once files exist:
+
+```markdown
+![General](docs/screenshots/01-general.png)
+![Pipeline flow](docs/screenshots/02-pipeline-flow.png)
+![Leads + call card](docs/screenshots/03-leads.png)
+![Slack gate](docs/screenshots/04-slack.png)
+![Booked demos](docs/screenshots/05-booked-demos.png)
+```
+
+Never commit screenshots that show API keys, webhook URLs, or personal accounts.
 
 ## Overview
 
-This project demonstrates building AI-first internal tooling for GTM/Sales automation—the exact type of work described in the ElevenLabs Internal AI Engineer role. It showcases:
-
-- **Webhook-driven lead intake** - FastAPI endpoint captures enterprise form submissions
-- **Claude-powered enrichment** - AI analyzes companies, scores against ICP, and classifies tier
-- **Human-in-the-loop guardrails** - High-value leads (Fortune 500, high ICP score) require Slack approval
-- **ElevenAgents voice integration** - Automated voice outreach after human approval
-- **Complete audit trail** - Every action logged with blast-radius classification
-- **Systems-thinking design** - Security, auditability, and controlled blast radius from the start
+- **Intake** — `POST /api/leads/` or dashboard **Test Lead**
+- **Scoring** — Groq / OpenAI / Claude / Gemini / compatible (Configure → Model); name-list fallback without a key
+- **Human gate** — Selected (ICP ≥ 90 or Fortune 500) waits for **Voice Agent** / **Myself** / **Remove** (dashboard or Slack)
+- **Voice** — ElevenLabs Conversational AI + Twilio after Voice Agent; simulates if voice is not configured
+- **Post-call** — HMAC webhook → **Voice Completed** or **Booked Demo** (LLM may extract demo time)
+- **Audit** — every step logged with blast-radius classification
 
 ## Architecture
 
 ```
-┌──────────────┐     ┌──────────────┐     ┌──────────────┐     ┌──────────────┐
-│   Webhook    │────▶│    Claude    │────▶│    Slack     │────▶│  ElevenLabs  │
-│   Intake     │     │  Enrichment  │     │   Approval   │     │  Voice Agent │
-└──────────────┘     └──────────────┘     └──────────────┘     └──────────────┘
-       │                    │                    │                    │
-       └────────────────────┴────────────────────┴────────────────────┘
-                                    │
-                           ┌───────────────┐
-                           │  Audit Trail  │
-                           │  (Immutable)  │
-                           └───────────────┘
+┌────────────┐   ┌────────────┐   ┌────────────┐   ┌────────────┐   ┌─────────────────┐
+│  Intake    │──▶│  LLM Score │──▶│  Human     │──▶│ ElevenLabs │──▶│ Post-call       │
+│  webhook / │   │  (Groq…)   │   │  gate      │   │ outbound   │   │ webhook (HMAC)  │
+│  Test Lead │   │            │   │ Slack / UI │   │ call       │   │ → Completed or  │
+└────────────┘   └────────────┘   └────────────┘   └────────────┘   │   Booked Demo   │
+       │                │                │                │          └────────┬────────┘
+       └────────────────┴────────────────┴────────────────┘                   │
+                                    │                                         ▼
+                           ┌───────────────┐                         ┌────────────────┐
+                           │  Audit Trail  │                         │ Booked Demos   │
+                           └───────────────┘                         └────────────────┘
 ```
 
-## Tech Stack
+Callbacks need a **public HTTPS** API host (cloud deploy, or `ngrok http 8000` for local).
+
+## Tech stack
 
 | Component | Technology |
 |-----------|------------|
 | Backend | FastAPI, Python 3.11+, SQLAlchemy (async) |
-| Database | SQLite (production: PostgreSQL) |
-| AI Enrichment | Claude API (Anthropic) |
-| Voice Agent | ElevenLabs Conversational AI |
-| Approval Workflow | Slack Interactive Components |
-| Frontend | Next.js 14, TypeScript, Tailwind CSS, shadcn/ui |
+| Database | SQLite locally (PostgreSQL-ready URL) |
+| Scoring | Groq / OpenAI / Claude / Gemini / OpenAI-compatible |
+| Voice | ElevenLabs Conversational AI + Twilio |
+| Post-call | ElevenLabs webhook → `POST /api/voice/callback` |
+| Human gate | Slack interactivity + dashboard call card |
+| Frontend | Next.js, TypeScript, Tailwind, shadcn/ui |
 
-## Quick Start
+## Quick start
 
 ### Prerequisites
 
-- Python 3.11+
-- Node.js 18+
-- (Optional) Anthropic API key for Claude enrichment
-- (Optional) ElevenLabs API key for voice calls
-- (Optional) Slack app credentials for approval workflow
+- Python 3.11+, Node.js 18+
+- Optional: LLM key, ElevenLabs + Twilio, Slack app, public HTTPS (ngrok or cloud)
 
-### Backend Setup
+### Backend
 
 ```bash
 cd backend
 python -m venv venv
-source venv/bin/activate  # or `venv\Scripts\activate` on Windows
+# Windows: venv\Scripts\activate
+source venv/bin/activate
 pip install -r requirements.txt
-
-# Copy environment template
 cp .env.example .env
-# Edit .env with your API keys (optional - works with mock mode)
-
-# Start the server
+# Leave keys empty for demo mode, or set them / paste via Configure on localhost
 uvicorn app.main:app --reload --port 8000
 ```
 
-### Frontend Setup
+### Frontend
 
 ```bash
 cd frontend
@@ -76,128 +100,73 @@ npm install
 npm run dev
 ```
 
-The dashboard will be available at http://localhost:3456
+Dashboard: http://localhost:3456
 
-## API Endpoints
+### Secrets
 
-### Leads
+- Copy from `backend/.env.example` only. Never commit `.env` or `*.db`.
+- On localhost you can paste Model / Voice / Slack into **Configure** (in-memory for that server process).
+- For a public demo host, use environment variables on the platform — do not bake keys into the image or README.
 
-- `POST /api/leads/` - Create a new lead (webhook endpoint)
-- `GET /api/leads/` - List all leads with optional filters
-- `GET /api/leads/{id}` - Get a specific lead
-- `GET /api/leads/stats` - Pipeline statistics
-- `POST /api/leads/{id}/reprocess` - Re-run enrichment
+## API (high level)
 
-### Slack Integration
+| Area | Endpoints |
+|------|-----------|
+| Leads | `POST/GET /api/leads/`, `GET /api/leads/stats`, `POST /api/leads/{id}/reprocess`, decide actions |
+| Slack | `POST /api/slack/interactions`, `POST /api/slack/approve/{token}` |
+| Voice | `POST /api/voice/callback`, `POST /api/voice/simulate/{id}`, `GET /api/voice/config` |
+| Audit | `GET /api/audit/lead/{id}`, `GET /api/audit/high-risk`, `GET /api/audit/stats` |
+| Local setup | `GET/POST /api/local-keys/…` (loopback only) |
 
-- `POST /api/slack/interactions` - Slack button callback handler
-- `POST /api/slack/approve/{token}` - Direct URL approval (for testing)
+## Pipeline statuses
 
-### Audit
+1. **Received** → **Scoring** → **Scored**
+2. **Selected** (≥90 or Fortune 500) or **Parked**
+3. Human chooses **Voice Agent** / **Myself** / **Remove**
+4. **Voice Scheduled** → post-call → **Voice Completed** or **Booked Demo**
 
-- `GET /api/audit/lead/{id}` - Complete audit trail for a lead
-- `GET /api/audit/high-risk` - Recent high-risk actions
-- `GET /api/audit/stats` - Audit statistics
+## Blast radius
 
-### Voice
+| Tag | Meaning | Examples |
+|-----|---------|----------|
+| `read_only` | No external effects | Lookups |
+| `db_write` | Internal persistence | Status, score sheet |
+| `slack_post` | Workspace message | Approval request |
+| `voice_trigger` | Outbound dial | ElevenLabs call |
+| `crm_write` / `external_api` | Reserved for CRM / calendar | Future |
 
-- `GET /api/voice/config` - Current voice agent configuration
-- `POST /api/voice/callback` - ElevenAgents completion callback
-- `POST /api/voice/simulate/{id}` - Simulate voice call (demo mode)
+High-blast steps wait on the human gate and are audited.
 
-## Pipeline Flow
+## Demo mode (no keys)
 
-1. **Lead Received** - Webhook captures form submission with contact and company info
-2. **Claude Enrichment** - AI analyzes the company:
-   - Extracts/infers company domain, industry, size
-   - Estimates employee count and revenue
-   - Scores against Ideal Customer Profile (0-100)
-   - Classifies tier (Fortune 500, Enterprise, Mid-Market, SMB, Unqualified)
-3. **Approval Gate** - If Fortune 500 or ICP score ≥90:
-   - Posts interactive message to Slack
-   - Buttons: [Approve Voice Call] [Claim Manually] [Reject]
-   - Blocks automated outreach until human decision
-4. **Voice Outreach** - After approval:
-   - Triggers ElevenAgents conversational AI call
-   - Agent introduces ElevenLabs, qualifies interest
-   - Can answer pricing/security questions
-   - Books follow-up meetings
+- Scoring falls back to a local name list
+- Slack posts are skipped / mocked if no webhook
+- Voice Agent simulates the dial
 
-## Blast Radius Controls
+Suggested walkthrough:
 
-Every action in the system is tagged with its blast radius:
+1. **Test Lead** → pick Meta or Deutsche Telekom sample  
+2. Confirm **Selected** and open the call card or Slack  
+3. **Voice Agent** (simulate or real)  
+4. Post-call or Simulate Meeting Booked → **Booked Demos**
 
-| Blast Radius | Description | Example Actions |
-|-------------|-------------|-----------------|
-| `read_only` | No external effects | Lead lookup, audit queries |
-| `db_write` | Internal database changes | Status updates, enrichment save |
-| `slack_post` | Slack notifications | Approval request sent |
-| `voice_trigger` | Voice call initiation | Outbound call started |
-| `crm_write` | External CRM updates | (Future: Salesforce sync) |
-| `external_api` | Other external API calls | (Future: Calendar booking) |
-
-High-blast-radius actions require human approval and are logged with full reasoning chains.
-
-## Demo Mode
-
-The system works without any API keys in demo mode:
-
-- **Claude enrichment** - Uses pattern matching for company classification
-- **Slack integration** - Generates mock message IDs, approval via direct URL
-- **Voice calls** - Simulated with configurable outcomes
-
-To test the full flow:
-
-1. Submit a lead via the dashboard (use "Meta" or "Deutsche Telekom" samples)
-2. The lead will be flagged as Fortune 500 requiring approval
-3. Use the direct approval URL or simulate approval in the UI
-4. Trigger a simulated voice call from the lead detail view
-
-## Project Structure
+## Project structure
 
 ```
-├── backend/
+├── backend/app/
+│   ├── main.py
+│   ├── config.py
+│   ├── models/
+│   ├── routers/          # leads, slack, voice, audit, local-keys, preferences
+│   ├── services/         # pipeline, llm_client, slack, voice, audit, demo_booking
+│   └── utils/
+├── frontend/src/
 │   ├── app/
-│   │   ├── main.py           # FastAPI application
-│   │   ├── config.py         # Settings and environment
-│   │   ├── models/           # Database models and Pydantic schemas
-│   │   ├── routers/          # API route handlers
-│   │   ├── services/         # Business logic
-│   │   │   ├── claude_enrichment.py  # AI enrichment
-│   │   │   ├── slack_service.py      # Slack integration
-│   │   │   ├── voice_agent.py        # ElevenLabs integration
-│   │   │   └── audit.py              # Audit logging
-│   │   └── utils/            # Database utilities
-│   └── requirements.txt
-├── frontend/
-│   ├── src/
-│   │   ├── app/              # Next.js app router
-│   │   ├── components/       # React components
-│   │   │   ├── stats-cards.tsx
-│   │   │   ├── leads-table.tsx
-│   │   │   ├── lead-detail.tsx
-│   │   │   ├── lead-form.tsx
-│   │   │   └── pipeline-viz.tsx
-│   │   └── lib/              # API client and utilities
-│   └── package.json
+│   ├── components/       # pipeline, leads, configure, booked demos, …
+│   └── lib/
+├── docs/screenshots/
 └── README.md
 ```
-
-## Why This Project
-
-This project directly mirrors the responsibilities outlined in the ElevenLabs Internal AI Engineer role:
-
-✅ **"Designing and iterating on AI agents and workflow orchestrations"** - Claude enrichment pipeline with structured outputs
-
-✅ **"Integrating AI systems with core business stack - Salesforce, Slack"** - Full Slack interactive components integration
-
-✅ **"Building reusable automation services and shared templates"** - Modular service architecture, audit framework
-
-✅ **"Owning experiments end-to-end"** - Complete from webhook to voice call
-
-✅ **"Developing evaluation and monitoring frameworks"** - Comprehensive audit trail with blast-radius classification
-
-✅ **"Systems-thinking mindset with security, auditability, and blast radius"** - Core design principle
 
 ## License
 

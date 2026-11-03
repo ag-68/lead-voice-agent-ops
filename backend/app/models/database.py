@@ -9,13 +9,16 @@ Base = declarative_base()
 
 class LeadStatus(str, enum.Enum):
     RECEIVED = "received"
-    ENRICHING = "enriching"
-    ENRICHED = "enriched"
+    SCORING = "scoring"
+    SCORED = "scored"
     PENDING_APPROVAL = "pending_approval"
+    SELECTED = "selected"
+    PARKED = "parked"
     APPROVED = "approved"
     REJECTED = "rejected"
     VOICE_SCHEDULED = "voice_scheduled"
     VOICE_COMPLETED = "voice_completed"
+    BOOKED_DEMO = "booked_demo"
     CLAIMED_MANUALLY = "claimed_manually"
     FAILED = "failed"
 
@@ -60,6 +63,9 @@ class Lead(Base):
     voice_call_scheduled_at = Column(DateTime)
     voice_call_completed_at = Column(DateTime)
     voice_call_summary = Column(Text)
+    voice_conversation_id = Column(String(255), index=True)
+    demo_scheduled_for = Column(String(255))
+    demo_booking_notes = Column(Text)
     
     assigned_to = Column(String(255))
     
@@ -88,6 +94,17 @@ class AuditLog(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     lead = relationship("Lead", back_populates="audit_logs")
+
+
+class ClientPreference(Base):
+    __tablename__ = "client_preferences"
+
+    id = Column(Integer, primary_key=True)
+    sectors = Column(Text, nullable=False)
+    regions = Column(Text, nullable=False)
+    employee_bands = Column(Text, nullable=False)
+    services = Column(Text, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
 class SlackApprovalToken(Base):

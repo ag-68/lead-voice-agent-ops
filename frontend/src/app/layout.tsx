@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "Lead Qualifier Pipeline | AI-Powered Sales Automation",
-  description: "Autonomous inbound lead qualifier with Claude enrichment, Slack approval workflow, and ElevenAgents voice follow-up.",
+  description: "Autonomous inbound lead qualifier with LLM scoring, Slack approval workflow, and ElevenAgents voice follow-up.",
 };
 
 export default function RootLayout({
@@ -23,9 +23,9 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" className="h-full overflow-hidden">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        className={`${geistSans.variable} ${geistMono.variable} h-full overflow-hidden antialiased`}
       >
         {children}
       </body>
