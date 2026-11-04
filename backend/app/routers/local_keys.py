@@ -39,8 +39,9 @@ def _optional_text(payload: dict, name: str) -> str | None:
 
 
 @router.get("/")
-async def get_ai_status(request: Request):
-    _require_this_computer(request)
+async def get_ai_status():
+    # Read-only chip status (booleans/labels only — no secret values). Allowed remotely
+    # so a Cloud Run demo can show env-backed Model / Voice / Slack as configured.
     return ai_status()
 
 
