@@ -201,7 +201,14 @@ export function LeadDetail({ lead, open, onClose, onRefresh }: LeadDetailProps) 
                 <CardContent className="space-y-1 text-sm">
                   <p>
                     <span className="text-muted-foreground">When: </span>
-                    {lead.demo_scheduled_for || "Time not extracted"}
+                    {!lead.demo_scheduled_for?.trim() ||
+                    /^time not extracted/i.test(lead.demo_scheduled_for.trim()) ? (
+                      <span className="font-medium text-red-600">
+                        {lead.demo_scheduled_for?.trim() || "Time not extracted"}
+                      </span>
+                    ) : (
+                      lead.demo_scheduled_for
+                    )}
                   </p>
                   {lead.demo_booking_notes && (
                     <p>

@@ -305,6 +305,7 @@ export default function Dashboard() {
                   leads={leads}
                   loading={loading}
                   onSelectLead={handleSelectLead}
+                  onDeleteLead={handleDeleteLead}
                 />
               </div>
             )}
