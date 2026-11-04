@@ -23,15 +23,35 @@ Built as a portfolio demo of the work an **Internal AI Engineer** ships for GTM 
 
 ## Screenshots
 
-Drop captures into [`docs/screenshots/`](docs/screenshots/) (see that folder’s README for filenames). Suggested embeds once files exist:
+Pipeline UI and human gate (dashboard + Slack). Captures live under [`docs/screenshots/`](docs/screenshots/).
 
-```markdown
-![General](docs/screenshots/01-general.png)
-![Pipeline flow](docs/screenshots/02-pipeline-flow.png)
-![Leads + call card](docs/screenshots/03-leads.png)
-![Slack gate](docs/screenshots/04-slack.png)
-![Booked demos](docs/screenshots/05-booked-demos.png)
-```
+**General & pipeline**
+
+![Project General](docs/screenshots/Project_General.png)
+
+![Project Pipeline](docs/screenshots/Project_Pipeline.png)
+
+**Leads & scoring**
+
+![All Leads](docs/screenshots/All_Leads.png)
+
+![Test Lead](docs/screenshots/Test_Lead.png)
+
+![Scoring Info](docs/screenshots/Scoring_Info.png)
+
+**Human gate**
+
+![Dashboard Call Card](docs/screenshots/Dashboard_Call_Card.png)
+
+![Slack Call Card](docs/screenshots/Slack_Call_Card.png)
+
+**Post-call & preferences**
+
+![Voice Agent Call Transcript](docs/screenshots/Voice_Agent_Call_Transcript.png)
+
+![Booked Demo](docs/screenshots/Booked_Demo.png)
+
+![Client Preferences](docs/screenshots/Client_Preferences.png)
 
 Never commit screenshots that show API keys, webhook URLs, or personal accounts.
 

@@ -1,14 +1,18 @@
 # Screenshots
 
-Add PNG captures here and link them from the root `README.md`. Suggested set:
+PNG captures linked from the root `README.md`:
 
-| File | What to show |
+| File | What it shows |
 |------|----------------|
-| `01-general.png` | Project Pipeline → General (motivation + blast control) |
-| `02-pipeline-flow.png` | Pipeline Flow graph |
-| `03-leads.png` | Leads table + Test Lead + call card (Voice Agent / Myself / Remove) |
-| `04-slack.png` | Slack approval message with the same three actions |
-| `05-booked-demos.png` | Booked Demos tab |
-| `06-configure.png` | Configure panel (Model / Voice / Slack chips) — **no real keys visible** |
+| `Project_General.png` | Project Pipeline → General (motivation + blast control) |
+| `Project_Pipeline.png` | Pipeline Flow graph |
+| `All_Leads.png` | Leads table |
+| `Test_Lead.png` | Test Lead form |
+| `Scoring_Info.png` | Score sheet / scoring detail |
+| `Dashboard_Call_Card.png` | Dashboard call card (Voice Agent / Myself / Remove) |
+| `Slack_Call_Card.png` | Slack approval message with the same three actions |
+| `Voice_Agent_Call_Transcript.png` | Post-call transcript |
+| `Booked_Demo.png` | Booked Demos tab |
+| `Client_Preferences.png` | Client Preferences (ICP sectors / regions / size) |
 
 Before committing: crop out API keys, webhook URLs, ngrok hosts, phone numbers, and personal accounts.
