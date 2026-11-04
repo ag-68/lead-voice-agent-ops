@@ -4,7 +4,9 @@ Inbound lead qualifier with configurable LLM scoring, a human gate (dashboard + 
 
 ![Pipeline](https://img.shields.io/badge/Pipeline-Intake→Score→Gate→Voice→Post--call-blue)
 
-> **Live demo:** _add URL after deploy_ · **Walkthrough:** _add Loom / short video_
+> **Live demo (view-only):** https://lead-voice-web-692907822510.europe-west1.run.app  
+> **API:** https://lead-voice-api-692907822510.europe-west1.run.app  
+> Public writes are locked with `ADMIN_KEY`. Deploy your own unlocked copy from this repo for full local/cloud use.
 
 ## Why this project (Internal AI / GTM automation)
 
@@ -107,6 +109,8 @@ Dashboard: http://localhost:3456
 - Copy from `backend/.env.example` only. Never commit `.env` or `*.db`.
 - On localhost you can paste Model / Voice / Slack into **Configure** (in-memory for that server process).
 - For a public demo host, use environment variables on the platform — do not bake keys into the image or README.
+- Set `ADMIN_KEY` on any **public** host so Test Lead / calls require operator unlock (`X-Admin-Key`). Leave `ADMIN_KEY` empty for unrestricted local use.
+- Do not expose an unlocked instance that also has real LLM / Slack / Voice credentials.
 
 ## API (high level)
 

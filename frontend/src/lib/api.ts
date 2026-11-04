@@ -1,4 +1,46 @@
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const ADMIN_KEY_STORAGE = "lead_voice_admin_key";
+
+export interface DemoStatus {
+  locked: boolean;
+  repo_url: string;
+}
+
+export function getStoredAdminKey(): string {
+  if (typeof window === "undefined") return "";
+  return sessionStorage.getItem(ADMIN_KEY_STORAGE) || "";
+}
+
+export function setStoredAdminKey(key: string | null) {
+  if (typeof window === "undefined") return;
+  if (key && key.trim()) sessionStorage.setItem(ADMIN_KEY_STORAGE, key.trim());
+  else sessionStorage.removeItem(ADMIN_KEY_STORAGE);
+}
+
+function adminHeaders(extra?: Record<string, string>): HeadersInit {
+  const headers: Record<string, string> = { ...(extra || {}) };
+  const key = getStoredAdminKey();
+  if (key) headers["X-Admin-Key"] = key;
+  return headers;
+}
+
+async function readErrorMessage(res: Response, fallback: string): Promise<string> {
+  try {
+    const data = await res.json();
+    const detail = data?.detail;
+    if (typeof detail === "string") return detail;
+    if (detail && typeof detail.message === "string") return detail.message;
+  } catch {
+    // no JSON body
+  }
+  return fallback;
+}
+
+export async function fetchDemoStatus(): Promise<DemoStatus> {
+  const res = await fetch(`${API_BASE}/api/demo/status`);
+  if (!res.ok) return { locked: false, repo_url: "https://github.com/ag-68/lead-voice-agent-ops" };
+  return res.json();
+}
 
 export interface Lead {
   id: number;
@@ -85,10 +127,10 @@ export async function fetchLead(id: number): Promise<Lead> {
 export async function createLead(data: LeadFormData): Promise<Lead> {
   const res = await fetch(`${API_BASE}/api/leads/`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: adminHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify(data),
   });
-  if (!res.ok) throw new Error("Failed to create lead");
+  if (!res.ok) throw new Error(await readErrorMessage(res, "Failed to create lead"));
   return res.json();
 }
 
@@ -113,14 +155,10 @@ export async function fetchHighRiskActions(): Promise<AuditLog[]> {
 export async function decideLead(id: number, action: "call" | "claim" | "reject"): Promise<{ status: string; message: string }> {
   const res = await fetch(`${API_BASE}/api/leads/${id}/decide`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: adminHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify({ action }),
   });
-  if (!res.ok) {
-    const body = await res.json().catch(() => null);
-    const detail = body && typeof body.detail === "string" ? body.detail : "That action did not finish.";
-    throw new Error(detail);
-  }
+  if (!res.ok) throw new Error(await readErrorMessage(res, "That action did not finish."));
   return res.json();
 }
 
@@ -134,35 +172,35 @@ export async function resolveClaimedLead(
 ): Promise<{ status: string; message: string }> {
   const res = await fetch(`${API_BASE}/api/leads/${id}/resolve`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: adminHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify(body),
   });
-  if (!res.ok) {
-    const data = await res.json().catch(() => null);
-    const detail = data && typeof data.detail === "string" ? data.detail : "Could not resolve that lead.";
-    throw new Error(detail);
-  }
+  if (!res.ok) throw new Error(await readErrorMessage(res, "Could not resolve that lead."));
   return res.json();
 }
 
 export async function deleteLead(id: number): Promise<void> {
-  const res = await fetch(`${API_BASE}/api/leads/${id}`, { method: "DELETE" });
-  if (!res.ok) throw new Error("Failed to remove lead");
+  const res = await fetch(`${API_BASE}/api/leads/${id}`, {
+    method: "DELETE",
+    headers: adminHeaders(),
+  });
+  if (!res.ok) throw new Error(await readErrorMessage(res, "Failed to remove lead"));
 }
 
 export async function reprocessLead(id: number): Promise<void> {
   const res = await fetch(`${API_BASE}/api/leads/${id}/reprocess`, {
     method: "POST",
+    headers: adminHeaders(),
   });
-  if (!res.ok) throw new Error("Failed to reprocess lead");
+  if (!res.ok) throw new Error(await readErrorMessage(res, "Failed to reprocess lead"));
 }
 
 export async function simulateVoiceCall(leadId: number, meetingBooked: boolean = false): Promise<unknown> {
   const res = await fetch(
     `${API_BASE}/api/voice/simulate/${leadId}?meeting_booked=${meetingBooked}`,
-    { method: "POST" }
+    { method: "POST", headers: adminHeaders() }
   );
-  if (!res.ok) throw new Error("Failed to simulate voice call");
+  if (!res.ok) throw new Error(await readErrorMessage(res, "Failed to simulate voice call"));
   return res.json();
 }
 
@@ -308,19 +346,10 @@ export async function saveClientPreferences(body: {
 }): Promise<ClientPreferences> {
   const res = await fetch(`${API_BASE}/api/client-preferences`, {
     method: "PUT",
-    headers: { "Content-Type": "application/json" },
+    headers: adminHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify(body),
   });
-  if (!res.ok) {
-    let detail = "Could not save client preferences.";
-    try {
-      const data = await res.json();
-      if (typeof data?.detail === "string") detail = data.detail;
-    } catch {
-      // The response had no JSON detail.
-    }
-    throw new Error(detail);
-  }
+  if (!res.ok) throw new Error(await readErrorMessage(res, "Could not save client preferences."));
   return res.json();
 }
 

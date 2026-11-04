@@ -10,9 +10,11 @@ from .routers import (
     voice_router,
     local_keys_router,
     client_preferences_router,
+    demo_router,
 )
 from .config import get_settings
 from .services.local_keys import ai_status
+from .services.admin_gate import demo_locked
 
 settings = get_settings()
 
@@ -55,6 +57,7 @@ app.include_router(audit_router)
 app.include_router(voice_router)
 app.include_router(local_keys_router)
 app.include_router(client_preferences_router)
+app.include_router(demo_router)
 
 
 @app.get("/")
@@ -63,11 +66,13 @@ async def root():
         "name": "Lead Qualifier Pipeline",
         "version": "1.0.0",
         "status": "operational",
+        "demo_locked": demo_locked(),
         "endpoints": {
             "leads": "/api/leads",
             "slack": "/api/slack",
             "audit": "/api/audit",
             "voice": "/api/voice",
+            "demo": "/api/demo/status",
             "docs": "/docs",
         },
         "features": {

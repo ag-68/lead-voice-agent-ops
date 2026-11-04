@@ -10,11 +10,12 @@ from ..models import (
     LeadCreate, LeadResponse, LeadEnrichment, PipelineStats
 )
 from ..services import log_action, BlastRadius, qualify_lead, trigger_voice_call
+from ..services.admin_gate import require_admin
 
 router = APIRouter(prefix="/api/leads", tags=["leads"])
 
 
-@router.post("/", response_model=LeadResponse)
+@router.post("/", response_model=LeadResponse, dependencies=[Depends(require_admin)])
 async def create_lead(
     lead_data: LeadCreate,
     background_tasks: BackgroundTasks,
@@ -165,7 +166,7 @@ async def get_lead(lead_id: int, db: AsyncSession = Depends(get_db)):
     return lead
 
 
-@router.delete("/{lead_id}")
+@router.delete("/{lead_id}", dependencies=[Depends(require_admin)])
 async def delete_lead(lead_id: int, db: AsyncSession = Depends(get_db)):
     """Remove one lead and the records that belong to it."""
 
@@ -181,7 +182,7 @@ async def delete_lead(lead_id: int, db: AsyncSession = Depends(get_db)):
     return {"deleted": lead_id}
 
 
-@router.post("/{lead_id}/reprocess")
+@router.post("/{lead_id}/reprocess", dependencies=[Depends(require_admin)])
 async def reprocess_lead(
     lead_id: int,
     background_tasks: BackgroundTasks,
@@ -203,7 +204,7 @@ async def reprocess_lead(
     return {"message": "Lead reprocessing started", "lead_id": lead_id}
 
 
-@router.post("/{lead_id}/decide")
+@router.post("/{lead_id}/decide", dependencies=[Depends(require_admin)])
 async def decide_lead(lead_id: int, request: Request, db: AsyncSession = Depends(get_db)):
     """A person calls, claims, or rejects one lead from the page."""
 
@@ -276,7 +277,7 @@ async def decide_lead(lead_id: int, request: Request, db: AsyncSession = Depends
     return {"status": lead.status.value, "message": "Rejected. No call."}
 
 
-@router.post("/{lead_id}/resolve")
+@router.post("/{lead_id}/resolve", dependencies=[Depends(require_admin)])
 async def resolve_claimed_lead(lead_id: int, request: Request, db: AsyncSession = Depends(get_db)):
     """Manually finish a claimed (human) outreach as completed or booked demo."""
 

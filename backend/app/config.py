@@ -26,6 +26,10 @@ class Settings(BaseSettings):
     slack_webhook_url: str = ""
     slack_signing_secret: str = ""
 
+    # When set, mutating APIs require header X-Admin-Key (public demo lock).
+    admin_key: str = ""
+    repo_url: str = "https://github.com/ag-68/lead-voice-agent-ops"
+
     base_url: str = "http://localhost:8000"
 
     icp_criteria: dict = {

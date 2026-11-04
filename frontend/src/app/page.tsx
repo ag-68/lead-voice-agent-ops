@@ -13,6 +13,7 @@ import { AiConfigPanel } from "@/components/ai-config-panel";
 import { ClientPreferencesPanel } from "@/components/client-preferences-panel";
 import { Lead, PipelineStats, deleteLead, fetchLeads, fetchStats } from "@/lib/api";
 import { LeadActionPanel } from "@/components/lead-action-panel";
+import { DemoLockControls } from "@/components/demo-lock-controls";
 
 const SECTIONS = [
   { id: "pipeline", label: "Project Pipeline", icon: GitBranch },
@@ -113,6 +114,7 @@ export default function Dashboard() {
             ))}
           </ol>
           <div className="flex items-center gap-3">
+            <DemoLockControls />
             <div className="text-right">
               <p className="text-xs text-muted-foreground">Auto-refresh</p>
               <p className="text-sm font-medium">Every 5s</p>

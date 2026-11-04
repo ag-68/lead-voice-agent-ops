@@ -14,6 +14,7 @@ from ..services.voice_agent import (
     parse_elevenlabs_webhook,
     verify_elevenlabs_signature,
 )
+from ..services.admin_gate import require_admin
 
 router = APIRouter(prefix="/api/voice", tags=["voice"])
 
@@ -137,7 +138,7 @@ async def elevenlabs_post_call_webhook(
     }
 
 
-@router.post("/simulate/{lead_id}")
+@router.post("/simulate/{lead_id}", dependencies=[Depends(require_admin)])
 async def simulate_voice_call(
     lead_id: int,
     status: str = "completed",
