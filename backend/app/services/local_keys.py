@@ -183,10 +183,10 @@ def ai_status() -> dict:
     key_set = bool(chosen["api_key"])
     model_set = bool(chosen["model_set"])
     llm_ready = provider_set and key_set and model_set
-    # Chips only count an explicit Configure save for this process — .env alone is not "configured".
-    llm_configured = llm_ready and chosen["source"] == "this_session"
-    voice_configured = voice["ready"] and voice["source"] == "this_session"
-    slack_configured = slack["ready"] and slack["source"] == "this_session"
+    # Env / Cloud Run vars and Configure saves both count as configured.
+    llm_configured = llm_ready
+    voice_configured = voice["ready"]
+    slack_configured = slack["ready"]
     if llm_ready:
         scoring = f"{chosen['label']} scores the company"
     else:

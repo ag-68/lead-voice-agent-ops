@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { CalendarCheck, GitBranch, Plus, Target, Users } from "lucide-react";
+import { CalendarCheck, ExternalLink, GitBranch, Plus, Target, Users } from "lucide-react";
 import { StatsCards } from "@/components/stats-cards";
 import { LeadsTable } from "@/components/leads-table";
 import { BookedDemosTable } from "@/components/booked-demos-table";
@@ -11,9 +11,13 @@ import { PipelineModules } from "@/components/pipeline-modules";
 import { ArchitectureCards } from "@/components/architecture-cards";
 import { AiConfigPanel } from "@/components/ai-config-panel";
 import { ClientPreferencesPanel } from "@/components/client-preferences-panel";
-import { Lead, PipelineStats, deleteLead, fetchLeads, fetchStats } from "@/lib/api";
+import { Lead, PipelineStats, deleteLead, fetchLeads, fetchStats, isAdminUnlockError } from "@/lib/api";
 import { LeadActionPanel } from "@/components/lead-action-panel";
-import { DemoLockControls } from "@/components/demo-lock-controls";
+import { buttonVariants } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+import { PREVIEW_ONLY_TOAST, showToast } from "@/lib/toast";
+
+const REPO_URL = "https://github.com/ag-68/lead-voice-agent-ops";
 
 const SECTIONS = [
   { id: "pipeline", label: "Project Pipeline", icon: GitBranch },
@@ -88,20 +92,36 @@ export default function Dashboard() {
   };
 
   const handleDeleteLead = async (lead: Lead) => {
-    await deleteLead(lead.id);
-    if (selectedLead?.id === lead.id) {
-      setSelectedLead(null);
-      setDetailOpen(false);
+    try {
+      await deleteLead(lead.id);
+      if (selectedLead?.id === lead.id) {
+        setSelectedLead(null);
+        setDetailOpen(false);
+      }
+      if (actionLeadId === lead.id) setActionLeadId(null);
+      await loadData();
+    } catch (err) {
+      if (isAdminUnlockError(err)) showToast(PREVIEW_ONLY_TOAST);
     }
-    if (actionLeadId === lead.id) setActionLeadId(null);
-    await loadData();
   };
 
   return (
     <div className="flex h-full flex-col overflow-hidden bg-background">
       <header className="shrink-0 border-b">
         <div className="flex items-center gap-4 px-4 py-3">
-          <h1 className="shrink-0 text-xl font-bold">Lead Qualifier Pipeline</h1>
+          <div className="shrink-0 space-y-1.5">
+            <h1 className="text-xl font-bold">Lead Qualifier Pipeline</h1>
+            <a
+              href={REPO_URL}
+              target="_blank"
+              rel="noreferrer"
+              className={cn(buttonVariants({ variant: "outline", size: "sm" }), "h-8 gap-1.5")}
+              title="Opens the public GitHub repository so you can clone and deploy your own copy"
+            >
+              Get GitRepo & Deploy
+              <ExternalLink className="size-3.5" aria-hidden />
+            </a>
+          </div>
           <ol className="flex min-w-0 flex-1 gap-2">
             {FLOW.map((step) => (
               <li
@@ -114,7 +134,6 @@ export default function Dashboard() {
             ))}
           </ol>
           <div className="flex items-center gap-3">
-            <DemoLockControls />
             <div className="text-right">
               <p className="text-xs text-muted-foreground">Auto-refresh</p>
               <p className="text-sm font-medium">Every 5s</p>

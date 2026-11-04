@@ -15,6 +15,7 @@ import {
   saveSlackSetup,
   saveVoiceSetup,
 } from "@/lib/api";
+import { DemoLockControls } from "@/components/demo-lock-controls";
 
 function SetupChip({
   ready,
@@ -205,6 +206,9 @@ export function AiConfigPanel() {
           <SetupChip ready={slackReady} pending={!status} name="Slack" value={slackValue} />
         </span>
       </button>
+      <div className="mt-2 px-1" onClick={(e) => e.stopPropagation()}>
+        <DemoLockControls />
+      </div>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="w-[80vw]! max-w-[80vw]! sm:max-w-[80vw]! max-h-[90vh] overflow-y-auto">
           <DialogHeader>
@@ -214,11 +218,11 @@ export function AiConfigPanel() {
             <form onSubmit={handleModel} className="space-y-3">
               <h3 className="text-sm font-semibold">Model that scores the company</h3>
               <p className="text-sm text-muted-foreground">
-                Scoring needs a provider, an API key, and a model name. The chip turns Set only after you save here — values sitting in .env alone do not count as configured.
+                Scoring needs a provider, an API key, and a model name. Keys already set in the environment (or Cloud Run) count as configured; you can still paste values here to override them for this process.
               </p>
-              {status?.llm.source === "this_session" && status.llm.key_set && (
+              {status?.llm.key_set && status.llm.source !== "none" && (
                 <p className="text-sm text-muted-foreground">
-                  An API key is already set on this computer. Leave the key field blank to keep it, or paste a new one to replace it.
+                  An API key is already set ({status.llm.source === "environment" ? "from environment" : "on this computer"}). Leave the key field blank to keep it, or paste a new one to replace it.
                 </p>
               )}
               <label className="block text-sm">

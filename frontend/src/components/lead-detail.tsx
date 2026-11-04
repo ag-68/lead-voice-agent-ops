@@ -19,7 +19,9 @@ import {
   simulateVoiceCall,
   reprocessLead,
   resolveClaimedLead,
+  isAdminUnlockError,
 } from "@/lib/api";
+import { PREVIEW_ONLY_TOAST, showToast } from "@/lib/toast";
 
 interface LeadDetailProps {
   lead: Lead | null;
@@ -72,7 +74,11 @@ export function LeadDetail({ lead, open, onClose, onRefresh }: LeadDetailProps) 
       await loadAuditLogs();
       onRefresh();
     } catch (error) {
-      console.error("Failed to simulate call:", error);
+      if (isAdminUnlockError(error)) {
+        showToast(PREVIEW_ONLY_TOAST);
+      } else {
+        console.error("Failed to simulate call:", error);
+      }
     } finally {
       setActionLoading(false);
     }
@@ -86,7 +92,11 @@ export function LeadDetail({ lead, open, onClose, onRefresh }: LeadDetailProps) 
       onRefresh();
       onClose();
     } catch (error) {
-      console.error("Failed to reprocess:", error);
+      if (isAdminUnlockError(error)) {
+        showToast(PREVIEW_ONLY_TOAST);
+      } else {
+        console.error("Failed to reprocess:", error);
+      }
     } finally {
       setActionLoading(false);
     }
@@ -107,7 +117,11 @@ export function LeadDetail({ lead, open, onClose, onRefresh }: LeadDetailProps) 
       await loadAuditLogs();
       onRefresh();
     } catch (error) {
-      setActionError(error instanceof Error ? error.message : "Could not update that lead.");
+      if (isAdminUnlockError(error)) {
+        showToast(PREVIEW_ONLY_TOAST);
+      } else {
+        setActionError(error instanceof Error ? error.message : "Could not update that lead.");
+      }
     } finally {
       setActionLoading(false);
     }

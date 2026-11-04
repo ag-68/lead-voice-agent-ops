@@ -24,22 +24,65 @@ function adminHeaders(extra?: Record<string, string>): HeadersInit {
   return headers;
 }
 
-async function readErrorMessage(res: Response, fallback: string): Promise<string> {
+/** Expected demo-lock rejection — not an Error, so Next.js won't paint a console overlay. */
+export class AdminUnlockRequiredError {
+  readonly name = "AdminUnlockRequiredError";
+  constructor(public readonly message = "Demo is view-only.") {}
+}
+
+export function isAdminUnlockError(err: unknown): boolean {
+  if (err instanceof AdminUnlockRequiredError) return true;
+  if (
+    err &&
+    typeof err === "object" &&
+    "name" in err &&
+    (err as { name?: string }).name === "AdminUnlockRequiredError"
+  ) {
+    return true;
+  }
+  if (err instanceof Error) {
+    return /view-only|admin.?unlock|admin_unlock_required/i.test(err.message);
+  }
+  return false;
+}
+
+async function throwApiError(res: Response, fallback: string): Promise<never> {
   try {
     const data = await res.json();
     const detail = data?.detail;
-    if (typeof detail === "string") return detail;
-    if (detail && typeof detail.message === "string") return detail.message;
-  } catch {
-    // no JSON body
+    if (detail && typeof detail === "object") {
+      const code = typeof detail.code === "string" ? detail.code : "";
+      const message =
+        typeof detail.message === "string" ? detail.message : fallback;
+      if (code === "admin_unlock_required" || res.status === 403) {
+        throw new AdminUnlockRequiredError(message);
+      }
+      throw new Error(message);
+    }
+    if (typeof detail === "string") {
+      if (res.status === 403) throw new AdminUnlockRequiredError(detail);
+      throw new Error(detail);
+    }
+  } catch (err) {
+    if (err instanceof AdminUnlockRequiredError) throw err;
+    if (err instanceof Error) throw err;
   }
-  return fallback;
+  if (res.status === 403) throw new AdminUnlockRequiredError(fallback);
+  throw new Error(fallback);
 }
 
 export async function fetchDemoStatus(): Promise<DemoStatus> {
   const res = await fetch(`${API_BASE}/api/demo/status`);
-  if (!res.ok) return { locked: false, repo_url: "https://github.com/ag-68/lead-voice-agent-ops" };
+  if (!res.ok) {
+    throw new Error("Could not read demo lock status");
+  }
   return res.json();
+}
+
+/** True when this browser page is not a local dashboard. */
+export function isHostedBrowser(): boolean {
+  if (typeof window === "undefined") return false;
+  return !["localhost", "127.0.0.1"].includes(window.location.hostname);
 }
 
 export interface Lead {
@@ -130,7 +173,7 @@ export async function createLead(data: LeadFormData): Promise<Lead> {
     headers: adminHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify(data),
   });
-  if (!res.ok) throw new Error(await readErrorMessage(res, "Failed to create lead"));
+  if (!res.ok) await throwApiError(res, "Failed to create lead");
   return res.json();
 }
 
@@ -158,7 +201,7 @@ export async function decideLead(id: number, action: "call" | "claim" | "reject"
     headers: adminHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify({ action }),
   });
-  if (!res.ok) throw new Error(await readErrorMessage(res, "That action did not finish."));
+  if (!res.ok) await throwApiError(res, "That action did not finish.");
   return res.json();
 }
 
@@ -175,7 +218,7 @@ export async function resolveClaimedLead(
     headers: adminHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify(body),
   });
-  if (!res.ok) throw new Error(await readErrorMessage(res, "Could not resolve that lead."));
+  if (!res.ok) await throwApiError(res, "Could not resolve that lead.");
   return res.json();
 }
 
@@ -184,7 +227,7 @@ export async function deleteLead(id: number): Promise<void> {
     method: "DELETE",
     headers: adminHeaders(),
   });
-  if (!res.ok) throw new Error(await readErrorMessage(res, "Failed to remove lead"));
+  if (!res.ok) await throwApiError(res, "Failed to remove lead");
 }
 
 export async function reprocessLead(id: number): Promise<void> {
@@ -192,7 +235,7 @@ export async function reprocessLead(id: number): Promise<void> {
     method: "POST",
     headers: adminHeaders(),
   });
-  if (!res.ok) throw new Error(await readErrorMessage(res, "Failed to reprocess lead"));
+  if (!res.ok) await throwApiError(res, "Failed to reprocess lead");
 }
 
 export async function simulateVoiceCall(leadId: number, meetingBooked: boolean = false): Promise<unknown> {
@@ -200,7 +243,7 @@ export async function simulateVoiceCall(leadId: number, meetingBooked: boolean =
     `${API_BASE}/api/voice/simulate/${leadId}?meeting_booked=${meetingBooked}`,
     { method: "POST", headers: adminHeaders() }
   );
-  if (!res.ok) throw new Error(await readErrorMessage(res, "Failed to simulate voice call"));
+  if (!res.ok) await throwApiError(res, "Failed to simulate voice call");
   return res.json();
 }
 
@@ -349,7 +392,7 @@ export async function saveClientPreferences(body: {
     headers: adminHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify(body),
   });
-  if (!res.ok) throw new Error(await readErrorMessage(res, "Could not save client preferences."));
+  if (!res.ok) await throwApiError(res, "Could not save client preferences.");
   return res.json();
 }
 

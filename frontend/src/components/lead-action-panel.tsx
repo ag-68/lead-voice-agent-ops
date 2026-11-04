@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Lead, decideLead } from "@/lib/api";
+import { Lead, decideLead, isAdminUnlockError } from "@/lib/api";
+import { PREVIEW_ONLY_TOAST, showToast } from "@/lib/toast";
 
 interface LeadActionPanelProps {
   lead: Lead;
@@ -24,7 +25,11 @@ export function LeadActionPanel({ lead, onClose, onDone }: LeadActionPanelProps)
       setNote(result.message);
       await onDone();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "That action did not finish.");
+      if (isAdminUnlockError(err)) {
+        showToast(PREVIEW_ONLY_TOAST);
+      } else {
+        setError(err instanceof Error ? err.message : "That action did not finish.");
+      }
     } finally {
       setBusy(null);
     }

@@ -7,8 +7,10 @@ import { Input } from "@/components/ui/input";
 import {
   ClientPreferences,
   fetchClientPreferences,
+  isAdminUnlockError,
   saveClientPreferences,
 } from "@/lib/api";
+import { PREVIEW_ONLY_TOAST, showToast } from "@/lib/toast";
 
 type Choice = { id: string; label: string };
 
@@ -170,7 +172,11 @@ export function ClientPreferencesPanel() {
       setServices(saved.services);
       setMessage("Saved. The next scored lead uses these choices.");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not save client preferences.");
+      if (isAdminUnlockError(err)) {
+        showToast(PREVIEW_ONLY_TOAST);
+      } else {
+        setError(err instanceof Error ? err.message : "Could not save client preferences.");
+      }
     } finally {
       setSaving(false);
     }

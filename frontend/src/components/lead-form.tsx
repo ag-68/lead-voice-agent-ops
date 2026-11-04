@@ -1,11 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { createLead, LeadFormData } from "@/lib/api";
+import { createLead, isAdminUnlockError, LeadFormData } from "@/lib/api";
+import { PREVIEW_ONLY_TOAST, showToast } from "@/lib/toast";
 
 interface LeadFormProps {
   onSuccess: () => void;
@@ -75,8 +76,12 @@ export function LeadForm({ onSuccess }: LeadFormProps) {
       });
       onSuccess();
     } catch (err) {
-      setError("Failed to submit lead. Please try again.");
-      console.error(err);
+      if (isAdminUnlockError(err)) {
+        showToast(PREVIEW_ONLY_TOAST);
+      } else {
+        setError("Failed to submit lead. Please try again.");
+        console.error(err);
+      }
     } finally {
       setLoading(false);
     }
@@ -88,31 +93,31 @@ export function LeadForm({ onSuccess }: LeadFormProps) {
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>Test Lead</CardTitle>
-        <CardDescription>
-          Simulate an inbound lead submission. The pipeline will automatically score the lead.
-        </CardDescription>
+      <CardHeader className="pb-3">
+        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+          <h2 className="text-xl font-bold tracking-tight">Test Lead</h2>
+          <p className="text-sm text-muted-foreground">
+            Simulate an inbound lead submission. The pipeline will automatically score the lead.
+          </p>
+        </div>
       </CardHeader>
       <CardContent>
-        <div className="mb-6">
-          <p className="text-sm text-muted-foreground mb-2">Quick fill with sample data:</p>
-          <div className="flex flex-wrap gap-2">
-            {sampleLeads.map((sample, i) => (
-              <Button
-                key={i}
-                variant="outline"
-                size="sm"
-                onClick={() => fillSample(sample)}
-              >
-                {sample.company_name}
-              </Button>
-            ))}
-          </div>
+        <div className="mb-4 flex flex-wrap items-center gap-2">
+          <span className="shrink-0 text-sm text-muted-foreground">Quick fill</span>
+          {sampleLeads.map((sample, i) => (
+            <Button
+              key={i}
+              variant="outline"
+              size="sm"
+              onClick={() => fillSample(sample)}
+            >
+              {sample.company_name}
+            </Button>
+          ))}
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             <div>
               <label className="text-sm font-medium">Name *</label>
               <Input
@@ -132,9 +137,18 @@ export function LeadForm({ onSuccess }: LeadFormProps) {
                 placeholder="john@company.com"
               />
             </div>
+            <div>
+              <label className="text-sm font-medium">Phone</label>
+              <Input
+                type="tel"
+                value={formData.phone}
+                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                placeholder="+1-555-0123"
+              />
+            </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
               <label className="text-sm font-medium">Company *</label>
               <Input
@@ -152,16 +166,6 @@ export function LeadForm({ onSuccess }: LeadFormProps) {
                 placeholder="VP of Engineering"
               />
             </div>
-          </div>
-
-          <div>
-            <label className="text-sm font-medium">Phone</label>
-            <Input
-              type="tel"
-              value={formData.phone}
-              onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-              placeholder="+1-555-0123"
-            />
           </div>
 
           <div>
