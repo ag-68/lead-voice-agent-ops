@@ -58,6 +58,10 @@ evals/results/**
 !evals/results/demo/
 !evals/results/demo/.gitkeep
 
+# Deploy-only copies into backend build context (canonical sources: /prompts, /evals)
+backend/prompts/
+backend/evals/
+
 # Local captures not meant for the repo (committed shots live in docs/screenshots/)
 /screenshots/
 *.local.png

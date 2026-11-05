@@ -4,8 +4,8 @@ Inbound lead qualifier with configurable LLM scoring, a human gate (dashboard + 
 
 ![Pipeline](https://img.shields.io/badge/Pipeline-Intake→Score→Gate→Voice→Post--call-blue)
 
-> **Live demo (view-only):** https://lead-voice-web-692907822510.europe-west1.run.app  
-> **API:** https://lead-voice-api-692907822510.europe-west1.run.app  
+> **Live demo (view-only):** https://lead-voice-web-417710467872.europe-west1.run.app  
+> **API:** https://lead-voice-api-417710467872.europe-west1.run.app  
 > Public writes are locked with `ADMIN_KEY`. Deploy your own unlocked copy from this repo for full local/cloud use.
 
 ## Why this project (Internal AI / GTM automation)

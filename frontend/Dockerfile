@@ -8,7 +8,7 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 # Must be a real public API URL for Cloud Run. Empty ARG would fall back to localhost in the bundle.
-ARG NEXT_PUBLIC_API_URL=https://lead-voice-api-692907822510.europe-west1.run.app
+ARG NEXT_PUBLIC_API_URL=https://lead-voice-api-417710467872.europe-west1.run.app
 ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN echo "Building with NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}" \
