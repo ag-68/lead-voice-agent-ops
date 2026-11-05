@@ -404,3 +404,291 @@ export async function approveViaUrl(token: string, action: string = "approve_voi
   if (!res.ok) throw new Error("Failed to approve");
   return res.json();
 }
+
+export interface EvalsStatus {
+  active_prompt_version: string;
+  prompt_hash: string | null;
+  demo_extract_hash?: string | null;
+  mlflow_reachable: boolean;
+  mlflow_tracking_uri: string;
+  latest_report_available: boolean;
+  latest_report_path: string | null;
+}
+
+export interface EvalCaseResult {
+  id: string;
+  scorer?: string;
+  icp_score?: number;
+  icp_score_min?: number | null;
+  icp_score_max?: number | null;
+  icp_score_stdev?: number | null;
+  n_repeats?: number;
+  n_ok_passes?: number;
+  tier?: string | null;
+  is_fortune_500?: boolean;
+  judge?: {
+    groundedness: number;
+    groundedness_stdev?: number | null;
+    gate_accuracy: number;
+    tone_policy: number;
+    tone_policy_stdev?: number | null;
+    aggregate: number;
+    aggregate_stdev?: number | null;
+    actual_gate: string;
+    expected_gate: string;
+    actual_gate_counts?: Record<string, number>;
+    gate_pass_rate?: number | null;
+  };
+  score_band_ok?: boolean;
+  prompt_version?: string;
+  prompt_hash?: string;
+  trials?: EvalCaseResult[];
+  error?: string;
+}
+
+export interface EvalReport {
+  generated_at?: string;
+  prompt_version?: string;
+  prompt_hash?: string;
+  scorers?: string[];
+  n_repeats?: number;
+  n_cases?: number;
+  n_ok?: number;
+  mean_aggregate?: number | null;
+  mean_gate_accuracy?: number | null;
+  results?: EvalCaseResult[];
+}
+
+export interface EvalReportMeta {
+  id: string;
+  filename: string;
+  is_latest: boolean;
+  modified_at?: number;
+  generated_at?: string | null;
+  prompt_version?: string | null;
+  prompt_hash?: string | null;
+  n_cases?: number | null;
+  n_ok?: number | null;
+  mean_aggregate?: number | null;
+  mean_gate_accuracy?: number | null;
+  n_repeats?: number | null;
+  scorers?: string[];
+}
+
+export interface ReviewFeedback {
+  id: number;
+  lead_id: number | null;
+  trace_id: string | null;
+  judge_scores: Record<string, unknown> | null;
+  human_verdict: string;
+  actor: string;
+  action: string | null;
+  details: string | null;
+  created_at: string | null;
+}
+
+export async function fetchEvalsStatus(): Promise<EvalsStatus> {
+  const res = await fetch(`${API_BASE}/api/evals/status`);
+  if (!res.ok) throw new Error("Could not load evals status");
+  return res.json();
+}
+
+export async function fetchEvalReports(): Promise<EvalReportMeta[]> {
+  const res = await fetch(`${API_BASE}/api/evals/reports`);
+  if (!res.ok) throw new Error("Could not load eval report list");
+  const data = await res.json();
+  return data.reports ?? [];
+}
+
+export interface EvalRunStatus {
+  job_id: string | null;
+  status: "idle" | "running" | "completed" | "failed" | string;
+  phase?: string | null;
+  label?: string | null;
+  case_index?: number;
+  n_cases?: number;
+  pass_index?: number;
+  n_repeats?: number;
+  step_index?: number;
+  n_steps?: number;
+  case_id?: string | null;
+  error?: string | null;
+  summary?: {
+    report_id: string;
+    filename: string;
+    prompt_version?: string;
+    prompt_hash?: string;
+    mean_aggregate?: number | null;
+    n_ok?: number;
+    n_cases?: number;
+    n_repeats?: number;
+  } | null;
+  started_at?: string | null;
+  finished_at?: string | null;
+}
+
+export async function startEvalSuite(nRepeats = 3): Promise<EvalRunStatus> {
+  const res = await fetch(`${API_BASE}/api/evals/run?n_repeats=${nRepeats}`, {
+    method: "POST",
+    headers: adminHeaders(),
+  });
+  if (!res.ok) await throwApiError(res, "Could not run evals");
+  return res.json();
+}
+
+export async function fetchEvalRunStatus(): Promise<EvalRunStatus> {
+  const res = await fetch(`${API_BASE}/api/evals/run/status`);
+  if (!res.ok) throw new Error("Could not load eval run status");
+  return res.json();
+}
+
+export interface MlflowTraceRow {
+  run_id: string;
+  name: string;
+  span?: string | null;
+  lead_id?: string | null;
+  trace_id?: string | null;
+  prompt_hash?: string | null;
+  gate_outcome?: string | null;
+  status?: string | null;
+  start_time?: string | null;
+  latency_ms?: number | null;
+  icp_score?: number | null;
+  cost_usd?: number | null;
+  prompt_tokens?: number | null;
+  completion_tokens?: number | null;
+}
+
+export async function fetchMlflowTraces(limit = 50): Promise<{
+  available: boolean;
+  count: number;
+  traces: MlflowTraceRow[];
+}> {
+  const res = await fetch(`${API_BASE}/api/evals/traces?limit=${limit}`);
+  if (!res.ok) throw new Error("Could not load MLflow traces");
+  return res.json();
+}
+
+export interface LeadQuizCase {
+  id: string;
+  lead: {
+    name: string;
+    email: string;
+    company_name: string;
+    job_title?: string;
+    phone?: string;
+    message?: string;
+  };
+  expected_gate: string;
+  expected_score_min?: number;
+  expected_score_max?: number;
+  notes?: string;
+}
+
+export interface DemoQuizCase {
+  id: string;
+  call_text: string;
+  expected_meeting_booked: boolean;
+  expected_date_contains?: string[];
+  notes?: string;
+}
+
+export async function fetchLeadFixtures(): Promise<LeadQuizCase[]> {
+  const res = await fetch(`${API_BASE}/api/evals/fixtures/leads`);
+  if (!res.ok) throw new Error("Could not load lead quiz fixtures");
+  const data = await res.json();
+  return data.cases ?? [];
+}
+
+export async function fetchDemoFixtures(): Promise<DemoQuizCase[]> {
+  const res = await fetch(`${API_BASE}/api/evals/fixtures/demos`);
+  if (!res.ok) throw new Error("Could not load demo quiz fixtures");
+  const data = await res.json();
+  return data.cases ?? [];
+}
+
+export interface DemoEvalCaseResult {
+  id: string;
+  n_repeats?: number;
+  n_ok_passes?: number;
+  scorer?: string;
+  judge?: {
+    booked_accuracy: number;
+    date_ok: number;
+    date_ok_stdev?: number | null;
+    aggregate: number;
+    aggregate_stdev?: number | null;
+    expected_meeting_booked: boolean;
+    predicted_meeting_booked: boolean | null;
+    predicted_booked_counts?: { true: number; false: number; unknown: number };
+    sample_when?: string | null;
+  };
+  error?: string;
+}
+
+export interface DemoEvalReport {
+  kind?: string;
+  generated_at?: string;
+  prompt_version?: string;
+  prompt_hash?: string;
+  n_repeats?: number;
+  n_cases?: number;
+  n_ok?: number;
+  mean_aggregate?: number | null;
+  mean_booked_accuracy?: number | null;
+  results?: DemoEvalCaseResult[];
+}
+
+export async function fetchDemoEvalReports(): Promise<EvalReportMeta[]> {
+  const res = await fetch(`${API_BASE}/api/evals/demo/reports`);
+  if (!res.ok) throw new Error("Could not load demo eval report list");
+  const data = await res.json();
+  return data.reports ?? [];
+}
+
+export async function fetchDemoEvalReport(reportId?: string | null): Promise<{
+  available: boolean;
+  message: string | null;
+  report_id?: string;
+  report: DemoEvalReport | null;
+}> {
+  const params = reportId ? `?report_id=${encodeURIComponent(reportId)}` : "";
+  const res = await fetch(`${API_BASE}/api/evals/demo/report${params}`);
+  if (!res.ok) throw new Error("Could not load demo eval report");
+  return res.json();
+}
+
+export async function startDemoEvalSuite(nRepeats = 3): Promise<EvalRunStatus> {
+  const res = await fetch(`${API_BASE}/api/evals/demo/run?n_repeats=${nRepeats}`, {
+    method: "POST",
+    headers: adminHeaders(),
+  });
+  if (!res.ok) await throwApiError(res, "Could not run demo evals");
+  return res.json();
+}
+
+export async function fetchDemoEvalRunStatus(): Promise<EvalRunStatus> {
+  const res = await fetch(`${API_BASE}/api/evals/demo/run/status`);
+  if (!res.ok) throw new Error("Could not load demo eval run status");
+  return res.json();
+}
+
+export async function fetchEvalReport(reportId?: string | null): Promise<{
+  available: boolean;
+  message: string | null;
+  report_id?: string;
+  filename?: string;
+  report: EvalReport | null;
+}> {
+  const params = reportId ? `?report_id=${encodeURIComponent(reportId)}` : "";
+  const res = await fetch(`${API_BASE}/api/evals/report${params}`);
+  if (!res.ok) throw new Error("Could not load eval report");
+  return res.json();
+}
+
+export async function fetchReviewFeedback(leadId?: number): Promise<ReviewFeedback[]> {
+  const params = leadId != null ? `?lead_id=${leadId}` : "";
+  const res = await fetch(`${API_BASE}/api/evals/feedback${params}`);
+  if (!res.ok) throw new Error("Could not load review feedback");
+  return res.json();
+}

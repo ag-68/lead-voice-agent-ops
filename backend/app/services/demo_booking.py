@@ -9,7 +9,9 @@ from typing import Any
 
 import httpx
 
+from ..telemetry import llm_span
 from .local_keys import active_llm
+from .prompt_registry import render_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -86,57 +88,63 @@ async def _llm_extract_demo(summary: str) -> tuple[bool | None, str | None, str 
     if setup is None:
         return None, None, None
 
-    prompt = (
-        "From this voice-call summary/transcript, decide if a product demo or sales meeting "
-        "was booked. Return JSON only with keys: meeting_booked (boolean), "
-        "demo_scheduled_for (string or null, human-readable date/time), "
-        "notes (short string). If no clear booking, meeting_booked=false.\n\n"
-        f"{summary[:12000]}"
-    )
+    prompt_meta = render_prompt("demo_extract", summary=summary[:12000])
+    prompt = prompt_meta["rendered"]
     provider = setup["provider"]
-    try:
-        async with httpx.AsyncClient(timeout=40) as client:
-            if provider in ("openai", "groq", "openai_compatible"):
-                response = await client.post(
-                    f"{setup['base_url']}/chat/completions",
-                    headers={
-                        "authorization": f"Bearer {setup['api_key']}",
-                        "content-type": "application/json",
-                    },
-                    json={
-                        "model": setup["model"],
-                        "messages": [{"role": "user", "content": prompt}],
-                        "response_format": {"type": "json_object"},
-                    },
-                )
-                if response.status_code != 200:
+    with llm_span(
+        "demo_extract",
+        attrs={
+            "prompt_template_version": prompt_meta["version"],
+            "prompt_hash": prompt_meta["prompt_hash"],
+            "model_name": setup.get("model"),
+            "provider": provider,
+        },
+    ):
+        try:
+            async with httpx.AsyncClient(timeout=40) as client:
+                if provider in ("openai", "groq", "openai_compatible"):
+                    response = await client.post(
+                        f"{setup['base_url']}/chat/completions",
+                        headers={
+                            "authorization": f"Bearer {setup['api_key']}",
+                            "content-type": "application/json",
+                        },
+                        json={
+                            "model": setup["model"],
+                            "messages": [{"role": "user", "content": prompt}],
+                            "response_format": {"type": "json_object"},
+                        },
+                    )
+                    if response.status_code != 200:
+                        return None, None, None
+                    content = response.json()["choices"][0]["message"]["content"]
+                    data = json.loads(content)
+                elif provider == "anthropic":
+                    response = await client.post(
+                        "https://api.anthropic.com/v1/messages",
+                        headers={
+                            "x-api-key": setup["api_key"],
+                            "anthropic-version": "2023-06-01",
+                            "content-type": "application/json",
+                        },
+                        json={
+                            "model": setup["model"],
+                            "max_tokens": 400,
+                            "messages": [
+                                {"role": "user", "content": prompt + "\nReply with JSON only."}
+                            ],
+                        },
+                    )
+                    if response.status_code != 200:
+                        return None, None, None
+                    blocks = response.json().get("content", [])
+                    text = next((b.get("text") for b in blocks if b.get("type") == "text"), "")
+                    data = json.loads(text)
+                else:
                     return None, None, None
-                content = response.json()["choices"][0]["message"]["content"]
-                data = json.loads(content)
-            elif provider == "anthropic":
-                response = await client.post(
-                    "https://api.anthropic.com/v1/messages",
-                    headers={
-                        "x-api-key": setup["api_key"],
-                        "anthropic-version": "2023-06-01",
-                        "content-type": "application/json",
-                    },
-                    json={
-                        "model": setup["model"],
-                        "max_tokens": 400,
-                        "messages": [{"role": "user", "content": prompt + "\nReply with JSON only."}],
-                    },
-                )
-                if response.status_code != 200:
-                    return None, None, None
-                blocks = response.json().get("content", [])
-                text = next((b.get("text") for b in blocks if b.get("type") == "text"), "")
-                data = json.loads(text)
-            else:
-                return None, None, None
-    except Exception as exc:
-        logger.warning("Demo extraction LLM failed: %s", exc)
-        return None, None, None
+        except Exception as exc:
+            logger.warning("Demo extraction LLM failed: %s", exc)
+            return None, None, None
 
     if not isinstance(data, dict):
         return None, None, None

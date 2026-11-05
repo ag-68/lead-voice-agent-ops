@@ -5,6 +5,7 @@ from .voice import router as voice_router
 from .local_keys import router as local_keys_router
 from .client_preferences import router as client_preferences_router
 from .demo import router as demo_router
+from .evals_feedback import router as evals_feedback_router
 
 __all__ = [
     "leads_router",
@@ -14,4 +15,5 @@ __all__ = [
     "local_keys_router",
     "client_preferences_router",
     "demo_router",
+    "evals_feedback_router",
 ]

@@ -15,7 +15,9 @@ import { Input } from "@/components/ui/input";
 import {
   Lead,
   AuditLog,
+  ReviewFeedback,
   fetchAuditLogs,
+  fetchReviewFeedback,
   simulateVoiceCall,
   reprocessLead,
   resolveClaimedLead,
@@ -41,6 +43,7 @@ const blastRadiusColors: Record<string, string> = {
 
 export function LeadDetail({ lead, open, onClose, onRefresh }: LeadDetailProps) {
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
+  const [feedback, setFeedback] = useState<ReviewFeedback[]>([]);
   const [loadingLogs, setLoadingLogs] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
   const [demoWhen, setDemoWhen] = useState("");
@@ -50,6 +53,7 @@ export function LeadDetail({ lead, open, onClose, onRefresh }: LeadDetailProps) 
   useEffect(() => {
     if (lead && open) {
       loadAuditLogs();
+      loadFeedback();
     }
   }, [lead, open]);
 
@@ -63,6 +67,15 @@ export function LeadDetail({ lead, open, onClose, onRefresh }: LeadDetailProps) 
       console.error("Failed to load audit logs:", error);
     } finally {
       setLoadingLogs(false);
+    }
+  };
+
+  const loadFeedback = async () => {
+    if (!lead) return;
+    try {
+      setFeedback(await fetchReviewFeedback(lead.id));
+    } catch {
+      setFeedback([]);
     }
   };
 
@@ -144,6 +157,7 @@ export function LeadDetail({ lead, open, onClose, onRefresh }: LeadDetailProps) 
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="enrichment">AI Score</TabsTrigger>
             <TabsTrigger value="audit">Audit Trail</TabsTrigger>
+            <TabsTrigger value="feedback">Review feedback</TabsTrigger>
             <TabsTrigger value="actions">Actions</TabsTrigger>
           </TabsList>
 
@@ -328,6 +342,55 @@ export function LeadDetail({ lead, open, onClose, onRefresh }: LeadDetailProps) 
                               {log.reasoning}
                             </pre>
                           </details>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="feedback" className="space-y-4">
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm flex items-center justify-between">
+                  Review feedback
+                  <Button variant="ghost" size="sm" onClick={loadFeedback}>
+                    Refresh
+                  </Button>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {feedback.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    No HITL feedback for this lead yet. Call / Claim / Reject from the Leads strip or Slack writes rows here and on the MLOps tab.
+                  </p>
+                ) : (
+                  <div className="space-y-3">
+                    {feedback.map((row) => (
+                      <div key={row.id} className="rounded-lg border p-3 text-sm">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Badge variant="outline">
+                            {row.human_verdict === "approve_handover_to_ai" || row.human_verdict === "approved"
+                              ? "approve-handover-to-AI"
+                              : row.human_verdict === "call_by_human" ||
+                                  row.human_verdict === "claimed" ||
+                                  row.human_verdict === "flagged_for_review"
+                                ? "call-by-human"
+                                : row.human_verdict === "lead_call_rejected" ||
+                                    row.human_verdict === "rejected"
+                                  ? "lead-call-rejected"
+                                  : row.human_verdict.replace(/_/g, "-")}
+                          </Badge>
+                          {row.action && <span className="text-xs text-muted-foreground">{row.action}</span>}
+                          <span className="text-xs text-muted-foreground">
+                            {row.created_at ? new Date(row.created_at).toLocaleString() : ""}
+                          </span>
+                        </div>
+                        <p className="mt-1 text-muted-foreground">by {row.actor}</p>
+                        {row.trace_id && (
+                          <p className="mt-1 font-mono text-[10px] text-muted-foreground">trace {row.trace_id}</p>
                         )}
                       </div>
                     ))}

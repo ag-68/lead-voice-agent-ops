@@ -18,7 +18,7 @@ Built as a portfolio demo of the work an **Internal AI Engineer** ships for GTM 
 | Integrate with the business stack (e.g. Slack) | Incoming webhook + interactivity (`Voice Agent` / `Myself` / `Remove`) |
 | Reusable automation patterns | Modular FastAPI services, Configure panel, Client Preferences |
 | Own the experiment end-to-end | Test Lead → score → gate → call (real or simulated) → Booked Demo |
-| Evaluation, auditability, blast radius | Retries on scoring, audit log, blast-radius tags on sensitive actions |
+| Evaluation, auditability, blast radius | MLOps tab: golden lead/demo evals (multi-pass), MLflow traces, HITL feedback log, audit + blast-radius tags |
 | Backend depth (APIs, webhooks, orchestration) | FastAPI intake, HMAC callbacks, async pipeline jobs |
 
 ## Screenshots
@@ -53,6 +53,10 @@ Pipeline UI and human gate (dashboard + Slack). Captures live under [`docs/scree
 
 ![Client Preferences](docs/screenshots/Client_Preferences.png)
 
+**MLOps & governance**
+
+![MLOps](docs/screenshots/MLops.png)
+
 Never commit screenshots that show API keys, webhook URLs, or personal accounts.
 
 ## Overview
@@ -63,6 +67,47 @@ Never commit screenshots that show API keys, webhook URLs, or personal accounts.
 - **Voice** — ElevenLabs Conversational AI + Twilio after Voice Agent; simulates if voice is not configured
 - **Post-call** — HMAC webhook → **Voice Completed** or **Booked Demo** (LLM may extract demo time)
 - **Audit** — every step logged with blast-radius classification
+- **MLOps** — prompts, MLflow traces, lead/demo golden evals, HITL feedback (local dashboard tab)
+
+## MLOps (local)
+
+Dashboard tab **MLOps & Agentic Governance** plus local tooling. Cloud Run demo can stay view-only; full MLOps is intended for a local/unlocked clone.
+
+### What the MLOps UI shows
+
+| Area | Purpose |
+|------|---------|
+| **Prompt registry** | Active version + hashes for `lead_scoring` and `demo_extract` YAML under [`prompts/`](prompts/) |
+| **MLflow tracing** | Reachability check + **See trace log** (recent runs: latency, tokens, cost, prompt hash) |
+| **Golden evals summary** | Up to 3 latest **lead** quiz runs (mean aggregate / gate) |
+| **Lead Eval Report** | Multi-pass golden lead quiz (default **3×**/case): score mean/range, gate votes, grounded / gate acc / tone |
+| **Demo Eval Report** | Multi-pass `demo_extract` quiz on simulated post-call transcripts: booked votes, date ok, aggregate |
+| **Quiz fixtures** | Popups: **See quiz leads** / **See quiz transcripts** |
+| **Review feedback log** | HITL: Voice-Agent Call → `approve-handover-to-AI` · Claim → `call-by-human` · Reject → `lead-call-rejected` |
+| **Guardrails** | Intake/decide validation; voice dial only for Selected (+ phone); Slack/HMAC side-effect gates |
+
+Scoring gate (**Selected** if Fortune‑500 or ICP ≥ 90) is separate from dial/reach-out guardrails (e.g. no phone blocks dial, not scoring).
+
+### Lead vs demo quizzes
+
+- **Lead** fixtures: [`evals/golden_dataset.json`](evals/golden_dataset.json) — expected gate aligned with the real select rule.
+- **Demo** fixtures: [`evals/demo_golden_dataset.json`](evals/demo_golden_dataset.json) — summary+transcript blobs like production post-call packaging (not a second “summarize” LLM).
+- Judges today are **heuristics** (rules / token checks / banned-phrase tone), not a second judge model.
+- Each **Run eval now** writes a timestamped snapshot + `latest` pointer; pick prior runs from the dropdown. Reports: `evals/results/` (lead) and `evals/results/demo/` (demo).
+
+### CLI & tracing browser
+
+```bash
+cd backend && pip install -r requirements.txt
+# from repo root (venv with backend on PYTHONPATH):
+python evals/run_evals.py --repeats 3
+python evals/run_demo_evals.py --repeats 3
+cd backend && pytest tests/ -q
+# optional full MLflow UI (cwd = backend if URI is file:./mlruns):
+mlflow ui --backend-store-uri file:./mlruns
+```
+
+Also: `ACTIVE_PROMPT_VERSION`, `MLFLOW_TRACKING_URI`, `/healthz`, `/readyz` (DB + MLflow). Notes for hardening evals: [`evals/IMPROVING_EVALS.md`](evals/IMPROVING_EVALS.md).
 
 ## Architecture
 
@@ -75,9 +120,10 @@ Never commit screenshots that show API keys, webhook URLs, or personal accounts.
        │                │                │                │          └────────┬────────┘
        └────────────────┴────────────────┴────────────────┘                   │
                                     │                                         ▼
-                           ┌───────────────┐                         ┌────────────────┐
-                           │  Audit Trail  │                         │ Booked Demos   │
-                           └───────────────┘                         └────────────────┘
+                           ┌─────────────────────┐                   ┌────────────────┐
+                           │ Audit + MLOps       │                   │ Booked Demos   │
+                           │ (traces / evals)    │                   └────────────────┘
+                           └─────────────────────┘
 ```
 
 Callbacks need a **public HTTPS** API host (cloud deploy, or `ngrok http 8000` for local).
@@ -93,6 +139,7 @@ Callbacks need a **public HTTPS** API host (cloud deploy, or `ngrok http 8000` f
 | Post-call | ElevenLabs webhook → `POST /api/voice/callback` |
 | Human gate | Slack interactivity + dashboard call card |
 | Frontend | Next.js, TypeScript, Tailwind, shadcn/ui |
+| MLOps | MLflow file store, prompt YAML registry, golden lead/demo evals, HITL feedback log |
 
 ## Quick start
 
@@ -141,6 +188,7 @@ Dashboard: http://localhost:3456
 | Voice | `POST /api/voice/callback`, `POST /api/voice/simulate/{id}`, `GET /api/voice/config` |
 | Audit | `GET /api/audit/lead/{id}`, `GET /api/audit/high-risk`, `GET /api/audit/stats` |
 | Local setup | `GET/POST /api/local-keys/…` (loopback only) |
+| MLOps / evals | `GET /api/evals/status`, `/reports`, `/report`, `POST /api/evals/run`, `/run/status`, `/traces`, `/fixtures/leads|demos`; demo: `/api/evals/demo/*`; feedback: `GET/POST /api/evals/feedback` |
 
 ## Pipeline statuses
 
@@ -180,15 +228,25 @@ Suggested walkthrough:
 ├── backend/app/
 │   ├── main.py
 │   ├── config.py
+│   ├── guardrails.py
+│   ├── telemetry.py      # MLflow spans + JSON logging
+│   ├── evals/            # lead + demo golden runners / judges
 │   ├── models/
-│   ├── routers/          # leads, slack, voice, audit, local-keys, preferences
-│   ├── services/         # pipeline, llm_client, slack, voice, audit, demo_booking
+│   ├── routers/          # leads, slack, voice, audit, evals_feedback, local-keys, …
+│   ├── services/         # pipeline, llm_client, prompt_registry, demo_booking, …
 │   └── utils/
+├── prompts/              # v1_lead_scoring.yaml, v1_demo_extract.yaml
+├── evals/
+│   ├── golden_dataset.json
+│   ├── demo_golden_dataset.json
+│   ├── run_evals.py / run_demo_evals.py
+│   ├── IMPROVING_EVALS.md
+│   └── results/          # lead snapshots; results/demo/ for demo
 ├── frontend/src/
 │   ├── app/
-│   ├── components/       # pipeline, leads, configure, booked demos, …
+│   ├── components/       # mlops-panel, eval-reports-section, pipeline, leads, …
 │   └── lib/
-├── docs/screenshots/
+├── docs/screenshots/     # includes MLops.png
 └── README.md
 ```
 

@@ -1,4 +1,12 @@
-from .database import Base, Lead, AuditLog, SlackApprovalToken, LeadStatus, LeadTier
+from .database import (
+    Base,
+    Lead,
+    AuditLog,
+    SlackApprovalToken,
+    ReviewFeedbackLog,
+    LeadStatus,
+    LeadTier,
+)
 from .schemas import (
     LeadCreate, LeadEnrichment, LeadResponse, 
     AuditLogResponse, SlackApprovalAction, PipelineStats,
@@ -6,7 +14,8 @@ from .schemas import (
 )
 
 __all__ = [
-    "Base", "Lead", "AuditLog", "SlackApprovalToken", "LeadStatus", "LeadTier",
+    "Base", "Lead", "AuditLog", "SlackApprovalToken", "ReviewFeedbackLog",
+    "LeadStatus", "LeadTier",
     "LeadCreate", "LeadEnrichment", "LeadResponse",
     "AuditLogResponse", "SlackApprovalAction", "PipelineStats",
     "VoiceCallRequest", "VoiceCallResult"

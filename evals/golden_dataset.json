@@ -1,0 +1,115 @@
+[
+  {
+    "id": "meta_vp",
+    "lead": {
+      "name": "Sarah Chen",
+      "email": "sarah.chen@meta.com",
+      "company_name": "Meta",
+      "job_title": "VP of Product",
+      "phone": "+1-555-0100",
+      "message": "Exploring voice AI for customer support at scale."
+    },
+    "expected_gate": "selected",
+    "expected_score_min": 85,
+    "notes": "Name-list Fortune-500 → selected (F500 or ICP≥90). Clear enterprise ICP."
+  },
+  {
+    "id": "deutsche_telekom",
+    "lead": {
+      "name": "Michael Rodriguez",
+      "email": "m.rodriguez@telekom.de",
+      "company_name": "Deutsche Telekom",
+      "job_title": "Head of AI Innovation",
+      "phone": "+49-555-0200",
+      "message": "Voice AI for European call centers, GDPR required."
+    },
+    "expected_gate": "selected",
+    "expected_score_min": 85,
+    "notes": "On Fortune-500 name list → selected regardless of mid scores."
+  },
+  {
+    "id": "microsoft_no_phone",
+    "lead": {
+      "name": "Priya Nair",
+      "email": "priya.nair@microsoft.com",
+      "company_name": "Microsoft",
+      "job_title": "Director of Digital",
+      "phone": "",
+      "message": "Enterprise voice agents for industrial support."
+    },
+    "expected_gate": "selected",
+    "expected_score_min": 85,
+    "notes": "F500 selected for scoring/HITL; empty phone blocks dial later (guardrail), not the gate."
+  },
+  {
+    "id": "global_fintech",
+    "lead": {
+      "name": "James Park",
+      "email": "jpark@globalfintech.com",
+      "company_name": "GlobalFintech Corp",
+      "job_title": "Director of Engineering",
+      "phone": "+1-555-0500",
+      "message": "Banking chatbot, SOC2, low latency."
+    },
+    "expected_gate": "parked",
+    "expected_score_min": 60,
+    "expected_score_max": 89,
+    "notes": "Solid mid/enterprise ICP but NOT F500 and typically <90 → parked under real gate."
+  },
+  {
+    "id": "smb_startup",
+    "lead": {
+      "name": "Emily Watson",
+      "email": "ewatson@acmestartup.io",
+      "company_name": "Acme Startup Labs",
+      "job_title": "CTO",
+      "phone": "+1-555-0300",
+      "message": "Podcast TTS for 10k monthly requests."
+    },
+    "expected_gate": "parked",
+    "expected_score_max": 69,
+    "notes": "SMB / startup — park under threshold."
+  },
+  {
+    "id": "tiny_shop",
+    "lead": {
+      "name": "Sam Lee",
+      "email": "sam@tinybakery.example.org",
+      "company_name": "Tiny Bakery",
+      "job_title": "Owner",
+      "phone": "+1-555-0400",
+      "message": "Need a phone bot for weekend orders."
+    },
+    "expected_gate": "parked",
+    "expected_score_max": 49,
+    "notes": "Clear poor ICP fit → parked."
+  },
+  {
+    "id": "ambiguous_co",
+    "lead": {
+      "name": "Alex Kim",
+      "email": "alex@company.co",
+      "company_name": "Company Co",
+      "job_title": "Manager",
+      "phone": "+1-555-0600",
+      "message": "Interested in AI."
+    },
+    "expected_gate": "parked",
+    "expected_score_max": 60,
+    "notes": "Thin / ambiguous lead → parked."
+  },
+  {
+    "id": "student_project",
+    "lead": {
+      "name": "Chris Student",
+      "email": "chris@university.edu",
+      "company_name": "University Capstone",
+      "job_title": "Student",
+      "phone": "+1-555-0700",
+      "message": "Class project researching TTS APIs."
+    },
+    "expected_gate": "parked",
+    "expected_score_max": 40,
+    "notes": "Non-commercial student → parked."
+  }
+]

@@ -1,0 +1,12 @@
+version: v1
+name: demo_extract
+description: Extract demo booking decision from a voice-call summary.
+temperature: 0
+max_tokens: 512
+template: |
+  From this voice-call summary/transcript, decide if a product demo or sales meeting
+  was booked. Return JSON only with keys: meeting_booked (boolean),
+  demo_scheduled_for (string or null, human-readable date/time),
+  notes (short string). If no clear booking, meeting_booked=false.
+
+  {summary}

@@ -51,6 +51,13 @@ yarn-error.log*
 htmlcov/
 .pytest_cache/
 
+# Local MLflow / eval artifacts
+mlruns/
+evals/results/**
+!evals/results/.gitkeep
+!evals/results/demo/
+!evals/results/demo/.gitkeep
+
 # Local captures not meant for the repo (committed shots live in docs/screenshots/)
 /screenshots/
 *.local.png

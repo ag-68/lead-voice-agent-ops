@@ -117,3 +117,21 @@ class SlackApprovalToken(Base):
     expires_at = Column(DateTime, nullable=False)
     used = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class ReviewFeedbackLog(Base):
+    """Closed-loop HITL feedback for prompt/eval tuning."""
+
+    __tablename__ = "review_feedback_log"
+
+    id = Column(Integer, primary_key=True, index=True)
+    lead_id = Column(Integer, ForeignKey("leads.id"), nullable=True, index=True)
+    trace_id = Column(String(64), index=True)
+    judge_scores = Column(Text)  # JSON blob
+    # approve_handover_to_ai | call_by_human | lead_call_rejected
+    # legacy: approved | claimed | flagged_for_review | rejected
+    human_verdict = Column(String(64), nullable=False)
+    actor = Column(String(255), nullable=False)
+    action = Column(String(50))  # call | claim | reject
+    details = Column(Text)
+    created_at = Column(DateTime, default=datetime.utcnow)

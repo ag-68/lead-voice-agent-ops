@@ -32,6 +32,11 @@ class Settings(BaseSettings):
 
     base_url: str = "http://localhost:8000"
 
+    # Local LLMOps (file store by default; Cloud Run unchanged).
+    mlflow_tracking_uri: str = "file:./mlruns"
+    mlflow_experiment: str = "lead-voice-agent"
+    active_prompt_version: str = "v1"
+
     icp_criteria: dict = {
         "min_employees": 100,
         "target_industries": ["technology", "finance", "healthcare", "media", "telecommunications"],

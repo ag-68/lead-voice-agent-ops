@@ -11,6 +11,8 @@ from ..models import (
 )
 from ..services import log_action, BlastRadius, qualify_lead, trigger_voice_call
 from ..services.admin_gate import require_admin
+from ..services.review_feedback import record_human_verdict
+from ..guardrails import assert_voice_dial_allowed, validate_decide_action, validate_lead_intake
 
 router = APIRouter(prefix="/api/leads", tags=["leads"])
 
@@ -25,14 +27,15 @@ async def create_lead(
     Webhook endpoint for inbound lead submissions.
     Triggers the full qualification pipeline in the background.
     """
-    
+    guarded = validate_lead_intake(lead_data.model_dump())
+
     lead = Lead(
-        email=lead_data.email,
-        name=lead_data.name,
-        company_name=lead_data.company_name,
-        job_title=lead_data.job_title,
-        phone=lead_data.phone,
-        message=lead_data.message,
+        email=str(guarded.email),
+        name=guarded.name,
+        company_name=guarded.company_name,
+        job_title=guarded.job_title,
+        phone=guarded.phone,
+        message=guarded.message,
         status=LeadStatus.RECEIVED,
     )
     
@@ -212,9 +215,8 @@ async def decide_lead(lead_id: int, request: Request, db: AsyncSession = Depends
         body = await request.json()
     except Exception:
         body = None
-    action = body.get("action") if isinstance(body, dict) else None
-    if action not in ("call", "claim", "reject"):
-        raise HTTPException(status_code=400, detail="Choose call, claim, or reject.")
+    raw_action = body.get("action") if isinstance(body, dict) else None
+    action = validate_decide_action(raw_action)
 
     result = await db.execute(select(Lead).where(Lead.id == lead_id))
     lead = result.scalar_one_or_none()
@@ -222,6 +224,7 @@ async def decide_lead(lead_id: int, request: Request, db: AsyncSession = Depends
         raise HTTPException(status_code=404, detail="Lead not found")
 
     if action == "call":
+        assert_voice_dial_allowed(lead)
         success, message, call_id = await trigger_voice_call(lead)
         if not success:
             await log_action(
@@ -248,6 +251,13 @@ async def decide_lead(lead_id: int, request: Request, db: AsyncSession = Depends
             requires_approval=True,
             approved_by="dashboard",
         )
+        await record_human_verdict(
+            db,
+            lead_id=lead.id,
+            human_verdict="approve_handover_to_ai",
+            actor="dashboard",
+            action=action,
+        )
         return {"status": lead.status.value, "message": "Call started."}
 
     if action == "claim":
@@ -262,6 +272,13 @@ async def decide_lead(lead_id: int, request: Request, db: AsyncSession = Depends
             details="Claimed from the page. No call.",
             blast_radius=BlastRadius.DB_WRITE,
         )
+        await record_human_verdict(
+            db,
+            lead_id=lead.id,
+            human_verdict="call_by_human",
+            actor="dashboard",
+            action=action,
+        )
         return {"status": lead.status.value, "message": "Claimed. No call."}
 
     lead.status = LeadStatus.REJECTED
@@ -273,6 +290,13 @@ async def decide_lead(lead_id: int, request: Request, db: AsyncSession = Depends
         lead_id=lead.id,
         details="Rejected from the page. No call.",
         blast_radius=BlastRadius.DB_WRITE,
+    )
+    await record_human_verdict(
+        db,
+        lead_id=lead.id,
+        human_verdict="lead_call_rejected",
+        actor="dashboard",
+        action=action,
     )
     return {"status": lead.status.value, "message": "Rejected. No call."}
 

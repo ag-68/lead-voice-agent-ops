@@ -130,9 +130,10 @@ export function PipelineDetailDialog({
 
           <Section title="Architecture" edge="border-l-slate-400">
             <ul className="space-y-1.5">
-              <li><Tag tone={sky}>Frontend</Tag>Next.js: Leads, Booked Demos, Project Pipeline, Configure.</li>
-              <li><Tag tone={sky}>API</Tag>FastAPI: intake webhook, LLM score, Slack/dashboard decide, ElevenLabs dial + post-call webhook.</li>
-              <li><Tag tone={sky}>Database</Tag>SQLite: lead, score, conversation id, call summary/transcript, demo time/notes, audit trail.</li>
+              <li><Tag tone={sky}>Frontend</Tag>Next.js: Leads, Booked Demos, Project Pipeline, MLOps, Configure.</li>
+              <li><Tag tone={sky}>API</Tag>FastAPI: intake, versioned LLM score, Slack/dashboard decide, evals/feedback, ElevenLabs dial + post-call webhook.</li>
+              <li><Tag tone={sky}>Database</Tag>SQLite: lead, score, demo notes, audit trail, review_feedback_log.</li>
+              <li><Tag tone={sky}>LLMOps</Tag>MLflow file traces, prompt YAML versions, golden eval report, HITL feedback loop.</li>
               <li><Tag tone={amber}>Slack</Tag>Human step for Selected (90+ or Fortune 500).</li>
               <li><Tag tone={violet}>ElevenLabs</Tag>Outbound Twilio call, then workspace post-call webhook back into this API.</li>
               <li><Tag tone={sky}>Tunnel</Tag>Local post-call delivery needs a public URL (ngrok → port 8000).</li>

@@ -14,5 +14,6 @@ PNG captures linked from the root `README.md`:
 | `Voice_Agent_Call_Transcript.png` | Post-call transcript |
 | `Booked_Demo.png` | Booked Demos tab |
 | `Client_Preferences.png` | Client Preferences (ICP sectors / regions / size) |
+| `MLops.png` | MLOps tab (prompts, traces, lead/demo evals, HITL feedback) |
 
 Before committing: crop out API keys, webhook URLs, ngrok hosts, phone numbers, and personal accounts.

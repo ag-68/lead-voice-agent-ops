@@ -16,6 +16,7 @@ from .audit import BlastRadius, log_action
 from .claude_enrichment import enrich_lead
 from .slack_service import send_approval_request
 from ..config import get_settings
+from ..telemetry import get_trace_id, lead_trace, log_gate_outcome
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -23,8 +24,9 @@ settings = get_settings()
 
 async def qualify_lead(lead_id: int) -> None:
     try:
-        async with AsyncSessionLocal() as db:
-            await _qualify(db, lead_id)
+        with lead_trace(lead_id, "qualify_lead"):
+            async with AsyncSessionLocal() as db:
+                await _qualify(db, lead_id)
     except Exception as exc:
         logger.exception("Qualification failed for lead %s", lead_id)
         await _mark_failed(lead_id, exc)
@@ -42,7 +44,7 @@ async def _qualify(db, lead_id: int) -> None:
         action="lead_scoring_started",
         actor="system",
         lead_id=lead.id,
-        details="Starting lead scoring",
+        details=f"Starting lead scoring (trace_id={get_trace_id() or 'n/a'})",
         blast_radius=BlastRadius.READ_ONLY,
     )
 
@@ -85,6 +87,7 @@ async def _qualify(db, lead_id: int) -> None:
     if needs_approval:
         lead.status = LeadStatus.SELECTED
         await db.commit()
+        log_gate_outcome("selected", enrichment.icp_score)
         await log_action(
             db=db,
             action="lead_selected",
@@ -119,6 +122,7 @@ async def _qualify(db, lead_id: int) -> None:
 
     lead.status = LeadStatus.PARKED
     await db.commit()
+    log_gate_outcome("parked", enrichment.icp_score)
     await log_action(
         db=db,
         action="lead_parked",

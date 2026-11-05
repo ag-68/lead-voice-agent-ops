@@ -12,8 +12,10 @@ import logging
 import httpx
 
 from ..models import LeadEnrichment, LeadTier
+from ..telemetry import estimate_cost_usd, llm_span, redact_email
 from .client_preferences import ideal_client_block, load_preferences
 from .local_keys import active_llm
+from .prompt_registry import render_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -59,27 +61,6 @@ ENRICHMENT_SCHEMA = {
     ],
 }
 
-_PROMPT = """You score one inbound sales lead. Use only the facts below and what you already know about the company. Do not browse.
-
-Lead:
-- Name: {name}
-- Email: {email}
-- Company: {company_name}
-- Job title: {job_title}
-- Message: {message}
-
-{ideal_client}
-
-Score guide:
-- Fortune 500: 85-100
-- Enterprise, 1000+ employees, fitting industry: 70-84
-- Mid-market, 100-999 employees, fitting industry: 50-69
-- Small business, 50-99 employees: 30-49
-- Poor fit: 0-29
-
-Fill every field of the schema. If revenue is unknown, use 0.
-"""
-
 
 class LlmCallError(Exception):
     def __init__(self, message: str, retryable: bool):
@@ -118,8 +99,9 @@ async def score_lead(
         raise LlmCallError("No model key is configured.", retryable=False)
 
     prefs = await load_preferences()
-    ideal_client = ideal_client_block(prefs).replace("{", "{{").replace("}", "}}")
-    prompt = _PROMPT.format(
+    ideal_client = ideal_client_block(prefs)
+    prompt_meta = render_prompt(
+        "lead_scoring",
         name=name,
         email=email,
         company_name=company_name,
@@ -127,30 +109,50 @@ async def score_lead(
         message=message or "Not provided",
         ideal_client=ideal_client,
     )
+    prompt = prompt_meta["rendered"]
     last_error = "Model call failed."
-    for attempt in range(1, MAX_ATTEMPTS + 1):
-        try:
-            data = await _call(setup, prompt)
-            enrichment = parse_enrichment(data)
-            reasoning = (
-                f"Scored by {setup['label']} ({setup['model']}) "
-                f"on attempt {attempt} of {MAX_ATTEMPTS}. "
-                f"{enrichment.icp_reasoning}"
-            )
-            return enrichment, reasoning, setup["provider"]
-        except LlmCallError as exc:
-            last_error = str(exc)
-            logger.warning("Lead scoring attempt %s failed: %s", attempt, last_error)
-            if not exc.retryable or attempt == MAX_ATTEMPTS:
-                break
-            await asyncio.sleep(0.4 * attempt)
-    raise LlmCallError(
-        f"{last_error} Stopped after {attempt} of {MAX_ATTEMPTS} attempts.",
-        retryable=False,
-    )
+    with llm_span(
+        "score_lead",
+        attrs={
+            "prompt_template_version": prompt_meta["version"],
+            "prompt_hash": prompt_meta["prompt_hash"],
+            "model_name": setup.get("model"),
+            "provider": setup.get("provider"),
+            "email_redacted": redact_email(email),
+        },
+    ) as span:
+        for attempt in range(1, MAX_ATTEMPTS + 1):
+            try:
+                data, usage = await _call(setup, prompt)
+                enrichment = parse_enrichment(data)
+                prompt_tokens = int(usage.get("prompt_tokens") or 0)
+                completion_tokens = int(usage.get("completion_tokens") or 0)
+                span["prompt_tokens"] = prompt_tokens
+                span["completion_tokens"] = completion_tokens
+                span["cost_usd"] = estimate_cost_usd(
+                    setup["provider"], prompt_tokens, completion_tokens
+                )
+                span["icp_score"] = enrichment.icp_score
+                reasoning = (
+                    f"Scored by {setup['label']} ({setup['model']}) "
+                    f"on attempt {attempt} of {MAX_ATTEMPTS}. "
+                    f"prompt={prompt_meta['version']}#{prompt_meta['prompt_hash']}. "
+                    f"{enrichment.icp_reasoning}"
+                )
+                return enrichment, reasoning, setup["provider"]
+            except LlmCallError as exc:
+                last_error = str(exc)
+                logger.warning("Lead scoring attempt %s failed: %s", attempt, last_error)
+                if not exc.retryable or attempt == MAX_ATTEMPTS:
+                    break
+                await asyncio.sleep(0.4 * attempt)
+        raise LlmCallError(
+            f"{last_error} Stopped after {attempt} of {MAX_ATTEMPTS} attempts.",
+            retryable=False,
+        )
 
 
-async def _call(setup: dict, prompt: str) -> dict:
+async def _call(setup: dict, prompt: str) -> tuple[dict, dict]:
     provider = setup["provider"]
     try:
         async with httpx.AsyncClient(timeout=45) as client:
@@ -186,7 +188,15 @@ def _status_error(response: httpx.Response) -> LlmCallError:
     return LlmCallError(text, retryable=retryable)
 
 
-async def _anthropic(client: httpx.AsyncClient, setup: dict, prompt: str) -> dict:
+def _usage_from_openai(payload: dict) -> dict:
+    usage = payload.get("usage") or {}
+    return {
+        "prompt_tokens": usage.get("prompt_tokens") or usage.get("input_tokens") or 0,
+        "completion_tokens": usage.get("completion_tokens") or usage.get("output_tokens") or 0,
+    }
+
+
+async def _anthropic(client: httpx.AsyncClient, setup: dict, prompt: str) -> tuple[dict, dict]:
     response = await client.post(
         "https://api.anthropic.com/v1/messages",
         headers={
@@ -210,13 +220,18 @@ async def _anthropic(client: httpx.AsyncClient, setup: dict, prompt: str) -> dic
     )
     if response.status_code != 200:
         raise _status_error(response)
-    for block in response.json().get("content", []):
+    payload = response.json()
+    usage = {
+        "prompt_tokens": (payload.get("usage") or {}).get("input_tokens") or 0,
+        "completion_tokens": (payload.get("usage") or {}).get("output_tokens") or 0,
+    }
+    for block in payload.get("content", []):
         if block.get("type") == "tool_use" and isinstance(block.get("input"), dict):
-            return block["input"]
+            return block["input"], usage
     raise LlmCallError("Claude did not return the schema.", retryable=True)
 
 
-async def _openai(client: httpx.AsyncClient, setup: dict, prompt: str) -> dict:
+async def _openai(client: httpx.AsyncClient, setup: dict, prompt: str) -> tuple[dict, dict]:
     response = await client.post(
         f"{setup['base_url']}/chat/completions",
         headers={
@@ -238,15 +253,16 @@ async def _openai(client: httpx.AsyncClient, setup: dict, prompt: str) -> dict:
     )
     if response.status_code != 200:
         raise _status_error(response)
+    payload = response.json()
     try:
-        content = response.json()["choices"][0]["message"]["content"]
+        content = payload["choices"][0]["message"]["content"]
     except (KeyError, IndexError, TypeError) as exc:
         raise LlmCallError("The model reply had no content.", retryable=True) from exc
     try:
         data = json.loads(content)
     except json.JSONDecodeError as exc:
         raise LlmCallError("The model reply was not valid JSON.", retryable=True) from exc
-    return data
+    return data, _usage_from_openai(payload)
 
 
 def _gemini_schema() -> dict:
@@ -264,7 +280,7 @@ def _gemini_schema() -> dict:
     }
 
 
-async def _gemini(client: httpx.AsyncClient, setup: dict, prompt: str) -> dict:
+async def _gemini(client: httpx.AsyncClient, setup: dict, prompt: str) -> tuple[dict, dict]:
     url = (
         "https://generativelanguage.googleapis.com/v1beta/models/"
         f"{setup['model']}:generateContent"
@@ -282,8 +298,14 @@ async def _gemini(client: httpx.AsyncClient, setup: dict, prompt: str) -> dict:
     )
     if response.status_code != 200:
         raise _status_error(response)
+    payload = response.json()
+    usage_meta = payload.get("usageMetadata") or {}
+    usage = {
+        "prompt_tokens": usage_meta.get("promptTokenCount") or 0,
+        "completion_tokens": usage_meta.get("candidatesTokenCount") or 0,
+    }
     try:
-        text = response.json()["candidates"][0]["content"]["parts"][0]["text"]
-        return json.loads(text)
+        text = payload["candidates"][0]["content"]["parts"][0]["text"]
+        return json.loads(text), usage
     except (KeyError, IndexError, TypeError, json.JSONDecodeError) as exc:
         raise LlmCallError("Gemini did not return the schema.", retryable=True) from exc

@@ -1,0 +1,58 @@
+[
+  {
+    "id": "clear_tuesday_demo",
+    "expected_meeting_booked": true,
+    "expected_date_contains": ["tuesday", "15:00"],
+    "notes": "Explicit demo booked with day and time",
+    "call_text": "Status: done\nDuration: 180s\nCall successful: success\nConversation ID: quiz-demo-001\n\nSummary:\nProspect agreed to a product demo next Tuesday at 15:00 CET.\n\nTranscript:\nagent: Thanks for your time — would a short product demo help?\nuser: Yes, let's do Tuesday at 3pm.\nagent: Great, I've booked a demo for Tuesday at 15:00 CET. You'll get a calendar invite.\nuser: Perfect, see you then."
+  },
+  {
+    "id": "calendar_invite_friday",
+    "expected_meeting_booked": true,
+    "expected_date_contains": ["friday", "10"],
+    "notes": "Booking confirmed via calendar invite language",
+    "call_text": "Status: done\nDuration: 240s\nCall successful: success\nConversation ID: quiz-demo-002\n\nSummary:\nMeeting booked; calendar invite for Friday morning.\n\nTranscript:\nagent: Shall I schedule a walkthrough?\nuser: Friday morning works — around 10.\nagent: Booked. I'll send a calendar invite for Friday at 10:00.\nuser: Thanks."
+  },
+  {
+    "id": "think_about_it",
+    "expected_meeting_booked": false,
+    "expected_date_contains": [],
+    "notes": "Interest but no booking",
+    "call_text": "Status: done\nDuration: 120s\nCall successful: success\nConversation ID: quiz-demo-003\n\nSummary:\nProspect wants to discuss internally; no meeting scheduled.\n\nTranscript:\nagent: Can we pencil a demo for next week?\nuser: Interesting, but I need to think about it and talk to my team.\nagent: Of course — happy to reconnect later.\nuser: I'll email you if we want to proceed."
+  },
+  {
+    "id": "maybe_next_week",
+    "expected_meeting_booked": false,
+    "expected_date_contains": [],
+    "notes": "Soft maybe — not a confirmed booking",
+    "call_text": "Status: done\nDuration: 95s\nCall successful: success\nConversation ID: quiz-demo-004\n\nSummary:\nVague interest in maybe next week; nothing confirmed.\n\nTranscript:\nagent: Would next week work for a demo?\nuser: Maybe next week, not sure yet.\nagent: No problem — should I hold a slot?\nuser: Don't book anything yet."
+  },
+  {
+    "id": "no_meeting_mentioned",
+    "expected_meeting_booked": false,
+    "expected_date_contains": [],
+    "notes": "Product questions only",
+    "call_text": "Status: done\nDuration: 80s\nCall successful: success\nConversation ID: quiz-demo-005\n\nSummary:\nCaller asked about pricing and regions; no demo discussed.\n\nTranscript:\nagent: How can I help today?\nuser: Just curious about pricing for voice agents in Europe.\nagent: We offer usage-based plans; I can share a sheet.\nuser: Please email that — thanks."
+  },
+  {
+    "id": "reschedule_not_new_book",
+    "expected_meeting_booked": false,
+    "expected_date_contains": [],
+    "notes": "They cancel / decline booking",
+    "call_text": "Status: done\nDuration: 70s\nCall successful: success\nConversation ID: quiz-demo-006\n\nSummary:\nProspect declined scheduling for now.\n\nTranscript:\nagent: Happy to book a demo if useful.\nuser: Actually we're not ready — please don't schedule anything.\nagent: Understood. Reach out anytime.\nuser: Will do."
+  },
+  {
+    "id": "booked_without_clear_time",
+    "expected_meeting_booked": true,
+    "expected_date_contains": [],
+    "notes": "Clear booked language but time left vague — booked=true, date optional",
+    "call_text": "Status: done\nDuration: 150s\nCall successful: success\nConversation ID: quiz-demo-007\n\nSummary:\nDemo was booked; exact clock time not stated.\n\nTranscript:\nagent: Shall we lock a demo?\nuser: Yes — book a demo with our team sometime this week.\nagent: Great, demo booked. We'll follow up with exact slots.\nuser: Sounds good."
+  },
+  {
+    "id": "see_you_on_monday",
+    "expected_meeting_booked": true,
+    "expected_date_contains": ["monday"],
+    "notes": "Implicit booking via see-you-on phrasing",
+    "call_text": "Status: done\nDuration: 110s\nCall successful: success\nConversation ID: quiz-demo-008\n\nSummary:\nAgreed to continue with a demo Monday.\n\nTranscript:\nagent: Let's continue with a live demo.\nuser: Yes — see you on Monday for the demo.\nagent: Looking forward to it. Meeting booked for Monday.\nuser: Bye."
+  }
+]

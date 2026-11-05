@@ -1,0 +1,25 @@
+version: v1
+name: lead_scoring
+description: Score one inbound sales lead against ICP preferences.
+temperature: 0
+max_tokens: 1024
+template: |
+  You score one inbound sales lead. Use only the facts below and what you already know about the company. Do not browse.
+
+  Lead:
+  - Name: {name}
+  - Email: {email}
+  - Company: {company_name}
+  - Job title: {job_title}
+  - Message: {message}
+
+  {ideal_client}
+
+  Score guide:
+  - Fortune 500: 85-100
+  - Enterprise, 1000+ employees, fitting industry: 70-84
+  - Mid-market, 100-999 employees, fitting industry: 50-69
+  - Small business, 50-99 employees: 30-49
+  - Poor fit: 0-29
+
+  Fill every field of the schema. If revenue is unknown, use 0.

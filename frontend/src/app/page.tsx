@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { CalendarCheck, ExternalLink, GitBranch, Plus, Target, Users } from "lucide-react";
+import { CalendarCheck, ExternalLink, GitBranch, Plus, Target, Users, Activity } from "lucide-react";
 import { StatsCards } from "@/components/stats-cards";
 import { LeadsTable } from "@/components/leads-table";
 import { BookedDemosTable } from "@/components/booked-demos-table";
@@ -11,6 +11,7 @@ import { PipelineModules } from "@/components/pipeline-modules";
 import { ArchitectureCards } from "@/components/architecture-cards";
 import { AiConfigPanel } from "@/components/ai-config-panel";
 import { ClientPreferencesPanel } from "@/components/client-preferences-panel";
+import { MlopsPanel } from "@/components/mlops-panel";
 import { Lead, PipelineStats, deleteLead, fetchLeads, fetchStats, isAdminUnlockError } from "@/lib/api";
 import { LeadActionPanel } from "@/components/lead-action-panel";
 import { buttonVariants } from "@/components/ui/button";
@@ -21,6 +22,7 @@ const REPO_URL = "https://github.com/ag-68/lead-voice-agent-ops";
 
 const SECTIONS = [
   { id: "pipeline", label: "Project Pipeline", icon: GitBranch },
+  { id: "mlops", label: "MLOps", icon: Activity },
   { id: "leads", label: "Leads", icon: Users },
   { id: "submit", label: "Test Lead", icon: Plus },
   { id: "demos", label: "Booked Demos", icon: CalendarCheck },
@@ -30,17 +32,18 @@ const SECTIONS = [
 type SectionId = (typeof SECTIONS)[number]["id"];
 
 const FLOW = [
-  { title: "Receive", detail: "Intake webhook or form saves the lead" },
-  { title: "Score", detail: "Configured LLM rates the company vs Client Preferences" },
-  { title: "Approve", detail: "Selected (90+ / F500) waits for a person to release the call" },
-  { title: "Reach-out", detail: "ElevenLabs dials; post-call webhook → Voice Completed or Booked Demo" },
+  { title: "Receive", detail: "Intake with guardrails; webhook or Test Lead" },
+  { title: "Score", detail: "Versioned prompt + LLM ICP score (MLflow span)" },
+  { title: "Approve", detail: "HITL gate; feedback log + blast-radius dial check" },
+  { title: "Reach-out", detail: "ElevenLabs dial → post-call extract → Booked Demo" },
 ] as const;
 
 const BLAST_RADIUS = [
-  "Fortune 500 leads always need human approval",
-  "Voice calls need explicit Slack sign-off",
-  "All actions logged to an immutable audit trail",
-  "External APIs gated behind the approval workflow",
+  "Fortune 500 / high ICP leads wait for human Call · Claim · Reject",
+  "Voice dial blocked unless Selected + phone (deterministic guardrail)",
+  "Slack signature / ElevenLabs HMAC gate outbound side effects",
+  "Immutable audit trail + review_feedback_log for every human verdict",
+  "Prompt hash + MLflow traces keep scoring reproducible locally",
 ] as const;
 
 export default function Dashboard() {
@@ -199,6 +202,12 @@ export default function Dashboard() {
                 />
               </div>
             )}
+            {section === "mlops" && (
+              <div className="min-h-0 flex-1 overflow-hidden">
+                <MlopsPanel />
+              </div>
+            )}
+
             {section === "pipeline" && (
               <div className="flex min-h-0 flex-1 gap-3">
                 <div className="flex shrink-0 flex-col gap-1.5" role="tablist" aria-label="Pipeline view">
@@ -230,7 +239,7 @@ export default function Dashboard() {
                         <div>
                           <h2 className="text-2xl font-semibold">Voice-Agent Aided Lead Pipeline</h2>
                           <p className="mt-3 text-lg leading-relaxed text-muted-foreground">
-                            A portfolio demo of AI-first GTM tooling: inbound leads are scored by a configurable LLM, high-value ones wait for a human gate, then an ElevenLabs voice agent can dial — with a full audit trail and blast-radius controls.
+                            A portfolio demo of AI-first GTM tooling: inbound leads are scored by a versioned LLM prompt, high-value ones wait for a human gate, then an ElevenLabs voice agent can dial — with audit, guardrails, MLflow tracing, and an eval / review-feedback loop (see the MLOps tab).
                           </p>
                         </div>
 
@@ -265,6 +274,7 @@ export default function Dashboard() {
                               <li>• <span className="font-medium text-foreground">Configure → Voice Agent</span> — ElevenLabs key, agent id, phone number id, post-call webhook secret</li>
                               <li>• <span className="font-medium text-foreground">Configure → Slack</span> — incoming webhook URL and signing secret for the same human gate</li>
                               <li>• <span className="font-medium text-foreground">Client Preferences</span> — ideal-client criteria the scorer reads</li>
+                              <li>• <span className="font-medium text-foreground">ACTIVE_PROMPT_VERSION</span> — YAML prompt under <span className="font-mono">prompts/</span> (logged as prompt_hash)</li>
                               <li>• <span className="font-medium text-foreground">Public HTTPS host</span> — cloud URL or ngrok for ElevenLabs / Slack callbacks when not on localhost</li>
                             </ul>
                           </div>
@@ -272,10 +282,10 @@ export default function Dashboard() {
                             <h3 className="text-lg font-semibold">Testing</h3>
                             <ul className="mt-3 space-y-1.5 text-base text-muted-foreground">
                               <li>• Use <span className="font-medium text-foreground">Test Lead</span> with a sample company to walk intake → score → Parked or Selected</li>
-                              <li>• On Selected, try the dashboard call card or Slack buttons (Voice Agent / Myself / Remove)</li>
-                              <li>• Without a full voice setup, Voice Agent still simulates the dial; with ElevenLabs + a public callback URL, use a real post-call webhook</li>
-                              <li>• Check Booked Demos after a call that books a meeting (or Simulate Meeting Booked)</li>
-                              <li>• Pipeline Flow / Architecture tabs show the stage graph and stack detail</li>
+                              <li>• On Selected, try the dashboard call card or Slack (writes review feedback)</li>
+                              <li>• Open <span className="font-medium text-foreground">MLOps</span> for traces status, golden eval table, and feedback log</li>
+                              <li>• Run <span className="font-mono text-sm">python evals/run_evals.py</span> then refresh MLOps</li>
+                              <li>• Pipeline Flow / Architecture cover stages + stack including LLMOps endpoints</li>
                             </ul>
                           </div>
                         </div>

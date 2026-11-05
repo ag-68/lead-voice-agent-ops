@@ -10,6 +10,8 @@ from ..services import (
     validate_approval_token, update_approval_message,
     trigger_voice_call, log_action, BlastRadius
 )
+from ..services.review_feedback import record_human_verdict
+from ..guardrails import assert_voice_dial_allowed
 
 router = APIRouter(prefix="/api/slack", tags=["slack"])
 
@@ -65,6 +67,7 @@ async def handle_slack_interaction(
     await db.commit()
     
     if action_id == "approve_voice_call":
+        assert_voice_dial_allowed(lead)
         await log_action(
             db=db,
             action="lead_approved",
@@ -96,6 +99,13 @@ async def handle_slack_interaction(
                 approved_by=user_name,
             )
             
+            await record_human_verdict(
+                db,
+                lead_id=lead.id,
+                human_verdict="approve_handover_to_ai",
+                actor=f"slack:{user_id}",
+                action="call",
+            )
             return {
                 "response_type": "in_channel",
                 "replace_original": True,
@@ -121,6 +131,13 @@ async def handle_slack_interaction(
             details=f"Claimed by {user_name} for manual outreach",
             blast_radius=BlastRadius.DB_WRITE,
         )
+        await record_human_verdict(
+            db,
+            lead_id=lead.id,
+            human_verdict="call_by_human",
+            actor=f"slack:{user_id}",
+            action="claim",
+        )
         
         return {
             "response_type": "in_channel",
@@ -139,6 +156,13 @@ async def handle_slack_interaction(
             lead_id=lead.id,
             details=f"Rejected by {user_name}",
             blast_radius=BlastRadius.DB_WRITE,
+        )
+        await record_human_verdict(
+            db,
+            lead_id=lead.id,
+            human_verdict="lead_call_rejected",
+            actor=f"slack:{user_id}",
+            action="reject",
         )
         
         return {

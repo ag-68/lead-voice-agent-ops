@@ -37,7 +37,7 @@ const NODES: Record<NodeId, FlowNode> = {
     tone: "border-slate-400",
     tag: "bg-slate-500/15 text-slate-800 dark:text-slate-200",
     blocks: [
-      { label: "Processing", text: "A form on this page, or POST /api/leads/, saves name, email, company, and message. Scoring starts after the response, in its own DB session." },
+      { label: "Processing", text: "Test Lead or POST /api/leads/ saves the lead after intake guardrails (email domain + phone format). Scoring runs in its own DB session." },
       { label: "AI", text: "No LLM and no voice agent at intake." },
       { label: "State", text: "Received until scoring moves it to Scoring." },
     ],
@@ -49,9 +49,9 @@ const NODES: Record<NodeId, FlowNode> = {
     tone: "border-sky-500",
     tag: "bg-sky-500/15 text-sky-800 dark:text-sky-200",
     blocks: [
-      { label: "Processing", text: "Scoring → one structured LLM sheet (company facts, ICP 0–100, Fortune 500 flag, tier). Up to 3 retries; on failure falls back to the name list." },
-      { label: "AI", text: "Needs provider + API key + model in Configure. Client Preferences steer the prompt." },
-      { label: "Branch", text: "Gate reads only ICP score and Fortune 500. Tier is audit-only. Next: Parked or Selected." },
+      { label: "Processing", text: "Scoring → structured ICP sheet from ACTIVE_PROMPT_VERSION YAML. Up to 3 retries; fallback to name list. MLflow child span logs prompt_hash, latency, tokens." },
+      { label: "AI", text: "Needs provider + API key + model in Configure. Client Preferences inject into the versioned prompt." },
+      { label: "Branch", text: "Gate reads ICP score and Fortune 500. Next: Parked or Selected. Golden evals judge groundedness + gate accuracy." },
     ],
   },
   parked: {
@@ -86,10 +86,10 @@ const NODES: Record<NodeId, FlowNode> = {
     tag: "bg-amber-500/15 text-amber-900 dark:text-amber-200",
     blocks: [
       { label: "Who", text: "Reached from Selected (usual) or from Parked when someone decides to act anyway." },
-      { label: "Call", text: "Starts the ElevenLabs dial → Voice Scheduled → post-call webhook." },
-      { label: "Claim", text: "Person owns follow-up. No auto dial. Later they manually mark Completed or Booked Demo." },
-      { label: "Reject", text: "Stops outreach. Terminal Rejected state." },
-      { label: "Endpoints", text: "POST /api/leads/{id}/decide or Slack interactions." },
+      { label: "Call", text: "Guardrail: Selected + phone required. Starts ElevenLabs dial → Voice Scheduled. HITL: approve-handover-to-AI." },
+      { label: "Claim", text: "Person owns follow-up. HITL: call-by-human. Later mark Completed or Booked Demo." },
+      { label: "Reject", text: "Stops outreach. HITL: lead-call-rejected. Terminal Rejected state." },
+      { label: "Endpoints", text: "POST /api/leads/{id}/decide or Slack → review_feedback_log (MLOps tab)." },
     ],
   },
   claim: {
@@ -122,7 +122,7 @@ const NODES: Record<NodeId, FlowNode> = {
     tone: "border-violet-500",
     tag: "bg-violet-500/15 text-violet-800 dark:text-violet-200",
     blocks: [
-      { label: "Trigger", text: "Only Voice Agent — from Selected or from a Parked override." },
+      { label: "Trigger", text: "Voice Agent after HITL — blast-radius VOICE_TRIGGER + audit approved_by." },
       { label: "Needs", text: "API key, agent id, phone number id. Otherwise simulated Voice Scheduled." },
       { label: "State", text: "Voice Scheduled + conversation id for the webhook." },
     ],
@@ -135,7 +135,7 @@ const NODES: Record<NodeId, FlowNode> = {
     tag: "bg-violet-500/15 text-violet-800 dark:text-violet-200",
     blocks: [
       { label: "Processing", text: "ElevenLabs POSTs transcript/analysis to POST /api/voice/callback (public HTTPS / ngrok). HMAC checked; lead matched by conversation id." },
-      { label: "AI", text: "Collected notes + transcript hints, then scoring LLM (e.g. Groq) extracts booking and demo time." },
+      { label: "AI", text: "Versioned demo_extract prompt + MLflow span; heuristics then LLM for booking/time." },
       { label: "Branch", text: "Booked → Record. Otherwise → Completed (includes busy / no-answer summaries)." },
     ],
   },
